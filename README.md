@@ -13,17 +13,20 @@ Trend-following micro-scalper for small accounts, using pullback and breakout en
 TM-EA/
 ├── README.md
 ├── docs/
-│   ├── ARCHITECTURE.md          # implementation brief (safety rules win on conflict)
-│   ├── SOURCE_SPEC_V1.md        # single source of truth for strategy requirements
-│   └── archive/v1/              # superseded documents, read-only history
+│   ├── USER_GUIDE.md            # Comprehensive user manual & beginner's guide
+│   ├── MASTER.md                # Operating manual & AI orchestration hub
+│   ├── ARCHITECTURE.md          # Implementation brief (safety rules win on conflict)
+│   ├── SOURCE_SPEC_V1.md        # Single source of truth for strategy requirements
+│   └── archive/v1/              # Superseded documents, read-only history
 ├── MQL5/
-│   └── Experts/                 # EA source files (.mq5/.mqh)
+│   ├── Experts/                 # EA main file (.mq5) and compiled binary (.ex5)
+│   └── Include/TM_EA/           # Modular EA components (.mqh)
 ├── config/
 │   └── sets/                    # Versioned MT5 input presets (.set)
 ├── reports/
 │   ├── backtests/               # MT5 Strategy Tester reports and HTML exports
 │   └── forward/                 # Demo forward-test reports
-├── tests/                       # Test plans, scenarios and validation notes
+├── tests/                       # Test plans, logs, checklists and validation notes
 └── logs/                        # EA diagnostic logs (do not commit sensitive data)
 ```
 
@@ -44,6 +47,11 @@ TM-EA/
 - A `.set` file is a configuration snapshot, not proof of a profitable strategy.
 - Save every meaningful backtest report together with the exact `.set`, EA build/version, symbol, timeframe, broker specification, test dates, and modelling mode.
 
+## Documentation & User Guides
+
+- **Beginner & User Guide**: [docs/USER_GUIDE.md](docs/USER_GUIDE.md) — Step-by-step MT5 tester setup, preset selection, report export, and troubleshooting.
+- **Master AI Manual**: [docs/MASTER.md](docs/MASTER.md) — Canonical reference, roadmap, strategy invariants, and developer manual.
+
 ## Current status
 
-Scaffold only. No EA implementation or profitable preset is claimed. The draft `.set` in `config/sets/` must be validated against the final compiled EA input names before use.
+Core EA implementation complete (Pullback & Breakout modes implemented in `MQL5/Include/TM_EA/`, compiled binary `TM_TrendFollowerScalper.ex5` verified with 0 errors/0 warnings). Presets standardized in `config/sets/`. Currently in cost-stress testing and demo forward validation phase.

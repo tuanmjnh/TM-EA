@@ -1,0 +1,46 @@
+; TM-EA - Cost-Stress Test Preset (10,000 USD baseline)
+; Target: XAUUSDm on M5 (Exness point = 0.001).
+; Max_Spread_Points: 350 points = 0.35 USD = 3.5 pips.
+; All protective risk guards active.
+
+Enabled=true
+MagicNumber=123456
+TradeComment=TM_TFS_STRESS
+
+;--- Trend Filter (M15)
+Trend_Timeframe=15
+FastEMA_HTF=50
+SlowEMA_HTF=200
+ADX_Period=14
+ADX_Threshold=25.0
+
+;--- Entry (M5 Pullback + Breakout)
+Entry_Timeframe=5
+Entry_Mode=3
+PullbackEMA=20
+Pullback_Buffer_pips=2
+ATR_Channel_Period=14
+BreakoutK=0.7
+
+;--- Exit / Trailing (No TP)
+Use_TP=false
+Trail_ATR_Mult=2.0
+Trail_ATR_Period=14
+Activate_After_Profit_pips=4.0
+Trail_Step_pips=2.0
+Breakeven_After_pips=8.0
+
+;--- Risk Management
+RiskPercentPerTrade=0.5
+Min_Volume=0.01
+Max_Volume=0.05
+Max_Concurrent_Positions=1
+
+;--- Risk Guards (REALISTIC COSTS ENABLED)
+Max_Daily_Loss_Percent=1.5
+Max_Consecutive_Losses=4
+CoolDown_Minutes=30
+Max_Spread_Points=350
+News_Enable=true
+News_Buffer_Minutes=20
+Use_Session_Filter=true

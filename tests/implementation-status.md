@@ -11,7 +11,7 @@
 | 0 — Environment audit | In progress | MT5 build and compile path verified; symbol/account specs still to verify manually |
 | 1 — Skeleton | Done | EA, inputs, symbol specs helper and logger created; compile: 0 errors, 0 warnings |
 | 2 — Trend filter | Done | Closed-bar EMA/ADX trend filter implemented; compile: 0 errors, 0 warnings |
-| 3 — Entry logic | Done (Pullback) | Pullback scanning on new closed entry bars implemented; Breakout not yet implemented |
+| 3 — Entry logic | Done (Pullback & Breakout) | Pullback and ATR Breakout scanning on closed entry bars implemented; compile: 0 errors, 0 warnings |
 | 4 — Initial SL + risk sizing | Done | Initial SL from swing/ATR and cash-risk volume with downward rounding implemented; compile: 0 errors, 0 warnings |
 | 5 — Execution + position tracking | Done (basic) | Market orders with mandatory SL and no TP implemented; concurrent-position guard added; OnTradeTransaction hook still placeholder |
 | 6 — Trailing | Done (ATR + break-even) | ATR trailing, break-even and monotonic SL protection implemented; compile: 0 errors, 0 warnings |

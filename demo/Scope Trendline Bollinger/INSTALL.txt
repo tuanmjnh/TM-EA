@@ -1,0 +1,140 @@
+Scope Trendline Bollinger — Hướng dẫn cài đặt (MetaTrader 5) · 2026-10-18
+============================================================
+
+Dành cho người mới: bạn không cần biết lập trình. Làm lần lượt từng bước bên dưới là xong.
+Hướng dẫn đầy đủ về cách EA hoạt động nằm trong file HDSD đi kèm (các chữ "HDSD mục N" bên dưới trỏ tới file đó).
+
+TÓM TẮT 6 BƯỚC
+  1. Chép file EA vào thư mục của MT5.
+  2. Mở biểu đồ XAUUSD khung H1.
+  3. Bật nút Algo Trading.
+  4. Kéo EA vào biểu đồ, chỉnh thông số, bấm OK.
+  5. Kiểm tra EA đã chạy.
+
+Vài từ cần biết
+  - EA (Expert Advisor): robot giao dịch tự động chạy bên trong MT5.
+  - Navigator: bảng bên trái MT5 (bấm Ctrl+N để mở / đóng).
+  - Toolbox: bảng bên dưới MT5 (bấm Ctrl+T để mở / đóng). Tab "Experts" trong đó là nhật ký của EA.
+  - Tài khoản Hedging: loại tài khoản cho phép mở nhiều lệnh cùng lúc trên một mã. EA này cần loại này.
+  - Lot: khối lượng một lệnh.
+
+1. Chuẩn bị
+-----------
+  1. MT5 đã cài từ sàn của bạn và đăng nhập được tài khoản (tài khoản thật hoặc demo đều được).
+  2. Loại tài khoản phải là HEDGING (không phải Netting). Cách biết: hỏi sàn, hoặc xem trang quản
+     lý tài khoản của sàn, hoặc xem thanh tiêu đề cửa sổ MT5 (thường có chữ Hedge). Nếu là Netting,
+     EA sẽ dừng và tab Experts báo lỗi NETTING; khi đó hãy mở tài khoản Hedging.
+  3. File EA bản cộng đồng chạy được trên mọi tài khoản MT5, không cần đăng ký và không có ngày hết hạn.
+  4. EA chỉ hoạt động khi MT5 đang mở và máy có kết nối mạng. Tắt máy hoặc đóng MT5 thì EA ngừng.
+     Muốn EA chạy liên tục cả ngày đêm, hãy dùng VPS (máy ảo chạy 24/7).
+
+2. Cài file EA vào MT5
+----------------------
+  File bạn nhận được: "Scope Trendline Bollinger.ex5" (chỉ một file này, không cần cài thêm gì khác).
+
+  1. Trong MT5, bấm menu File (góc trên bên trái) > Open Data Folder. Một cửa sổ thư mục mở ra.
+  2. Mở thư mục MQL5, rồi mở tiếp thư mục Experts.
+  3. Chép (Copy / Paste) file "Scope Trendline Bollinger.ex5" vào thư mục Experts.
+  4. Quay lại MT5. Trong bảng Navigator, bấm chuột phải vào mục "Expert Advisors" rồi chọn Refresh
+     (hoặc tắt MT5 rồi mở lại). Tên "Scope Trendline Bollinger" sẽ hiện trong danh sách Expert Advisors.
+     Không thấy bảng Navigator thì bấm Ctrl+N.
+
+3. Mở biểu đồ đúng mã và đúng khung giờ
+---------------------------------------
+  1. Bấm menu File > New Chart, chọn mã XAUUSD. Tên mã có thể có thêm chữ phía sau tuỳ sàn
+     (ví dụ XAUUSDm hoặc XAUUSD.r); chọn mã XAUUSD của sàn bạn.
+  2. Chọn khung thời gian H1: trên thanh công cụ phía trên có các nút M1, M5, M15, H1...
+     hãy bấm nút H1. Sai khung thời gian thì EA không nhận đúng tín hiệu.
+
+4. Bật nút Algo Trading
+-----------------------
+  Trên thanh công cụ phía trên MT5 có nút "Algo Trading". Biểu tượng màu xanh (hình tam giác play) là
+  đang bật; màu đỏ (hình vuông stop) là đang tắt. Đang tắt thì bấm một lần để bật.
+
+5. Gắn EA lên biểu đồ
+---------------------
+  1. Trong Navigator, mở mục "Expert Advisors", tìm "Scope Trendline Bollinger", rồi kéo thả nó vào biểu đồ
+     XAUUSD H1 vừa mở (hoặc bấm đúp vào tên EA).
+  2. Hộp thoại hiện ra. Ở tab "Common", tick vào ô "Allow Algo Trading" (ở một số bản MT5 ghi là
+     "Allow algorithmic trading").
+  3. Chuyển sang tab "Inputs" để xem và chỉnh thông số. Bảng thông số có ở mục 9 bên dưới. Hai
+     thông số nên xem trước khi bấm OK:
+       - Server time: chọn đúng giờ máy chủ của sàn (cách kiểm tra: HDSD mục 8).
+       - Fixed lots: khối lượng lệnh đầu, chọn theo vốn của bạn (cách chọn: HDSD mục 7).
+     Các thông số còn lại đã được điền sẵn giá trị mặc định của sản phẩm.
+  4. Bấm OK.
+
+6. Kiểm tra EA đã chạy
+----------------------
+  1. Góc trên bên phải biểu đồ hiện tên EA. Nếu thấy dấu X, hoặc biểu tượng bị gạch / xám, nghĩa là
+     EA chưa được phép chạy: kiểm tra lại mục 4 (nút Algo Trading) và ô "Allow Algo Trading" ở mục 5.
+  2. Bấm Ctrl+T mở Toolbox, chọn tab "Experts". Đây là nhật ký của EA. Nếu thấy dòng có chữ
+     LICENSE hoặc ERROR thì đọc nội dung dòng đó và đối chiếu bảng xử lý sự cố ở HDSD mục 15.
+  3. Nếu để Info panel = On, bảng thông tin tiếng Việt sẽ hiện ở góc trên bên trái biểu đồ.
+  4. EA chưa vào lệnh ngay là bình thường: EA chỉ vào lệnh khi có tín hiệu, có ngày không có tín hiệu nào.
+
+7. Chạy thử bằng Strategy Tester (không bắt buộc)
+-------------------------------------------------
+  Trong MT5 bấm menu View > Strategy Tester. Chọn Expert "Scope Trendline Bollinger", mã XAUUSD,
+  khung thời gian H1, mô hình "Every tick based on real ticks", dùng tài khoản Hedging.
+  Kết quả khi chọn mô hình "1 minute OHLC" sẽ khác kết quả khi chọn tick thật. Chi tiết: HDSD mục 13.
+
+8. Cập nhật bản mới
+-------------------
+  1. Chép đè file .ex5 mới vào đúng thư mục Experts ở mục 2.
+  2. Trên mỗi biểu đồ đang chạy: gỡ EA (bấm chuột phải vào biểu đồ > Expert Advisors > Remove), gắn
+     lại EA (để nạp giá trị mặc định mới), rồi chỉnh lại thông số của bạn. KHÔNG nạp file .set hoặc
+     template lưu từ bản cũ — một số ô chọn có thể tự trở về lựa chọn đầu tiên mà bạn không nhận ra.
+
+9. Bảng thông số (Inputs)
+-------------------------
+  Mọi thông số đều là danh sách chọn. Nếu danh sách có mục "Custom", hãy chọn "Custom" rồi nhập số của
+  bạn ở nhóm 4 "CUSTOM VALUES" — giá trị đó chỉ được dùng khi bạn chọn "Custom".
+  Tên thông số giữ nguyên tiếng Anh như hiển thị trong MT5. Giá trị "mặc định" là giá trị đã điền sẵn.
+
+  1. GENERAL
+     Magic slot (different number per chart)  1 / 2 / 3 / 4 / 5 / 6 / 7 / 8 / 9 / 10  (mặc định 1)  — Số nhận diện lệnh của EA. Chạy EA trên nhiều biểu đồ thì mỗi biểu đồ một số khác nhau.
+     Server time  Auto (NY close: GMT+2, US summer GMT+3) / GMT+0 / GMT+1 / GMT+2 / GMT+3  (mặc định Auto (NY close: GMT+2, US summer GMT+3))  — Quy đổi giờ server của sàn sang UTC — dùng cho mốc đỉnh/đáy phiên (SL rổ, bước giá) và bộ lọc phiên/giờ/thứ; chọn sai = sai mốc SL và sai bộ lọc. Auto = sàn theo giờ New York close (GMT+2, mùa hè Mỹ GMT+3); sàn giờ cố định khác thì chọn số GMT tương ứng. Cách kiểm xem HDSD mục 8.
+     Trade direction  Both / Long only / Short only  (mặc định Both)  — Cho phép cả Mua và Bán, hoặc chỉ một chiều.
+     Position sizing  Fixed lots / Risk % per basket  (mặc định Fixed lots)  — Cách tính khối lượng lệnh đầu (HDSD mục 7).
+     Fixed lots (initial order)  0.01 / 0.02 / 0.05 / 0.10 / 0.20 / 0.50 / 1.00 / 2.00 / 5.00 / 10.00 / Custom  (mặc định 1.00)  — Lot lệnh đầu khi chọn Fixed lots. Lệnh vào thêm tính theo lot này (HDSD mục 3, HDSD mục 7).
+     Risk % per basket (worst case at max basket SL distance)  0.25 % / 0.5 % / 1 % / 2 % / 3 % / 5 % / Custom  (mặc định 1 %)  — Khi chọn Risk %: phần trăm vốn (equity) mất nếu mọi lệnh an toàn đều khớp rồi rổ chạm SL ở đúng giới hạn Max basket SL distance (HDSD mục 7).
+
+  2. DCA (SAFETY ORDERS)
+     Enable DCA (Off = single trade)  On / Off  (mặc định On)  — On: DCA theo rổ lệnh (HDSD mục 3). Off: mỗi tín hiệu 1 lệnh đơn, TP theo Single-trade RR.
+     Max safety orders (hedge orders count toward this limit)  1 / 2 / 3 / 4 / 5 / 7 / 9 / 10 / 12 / 15 / 20 / Custom  (mặc định 4)  — Số lệnh an toàn tối đa của một rổ, không tính lệnh đầu. 1 = rổ có tối đa 2 lệnh; lệnh đối ứng (nếu bật Hedge) tính vào số này.
+     Safety order step (x ATR)  0.3 x ATR / 0.4 x ATR / 0.5 x ATR / 0.6 x ATR / 0.75 x ATR / 0.8 x ATR / 1.0 x ATR / 1.5 x ATR / 2.0 x ATR / 2.5 x ATR / 3.0 x ATR / Custom  (mặc định Custom, ô số = 0.5572)  — Khoảng cách giữa các lệnh, đo bằng bội số ATR(14) tại lúc lệnh đầu khớp; cách tính khoảng cách xem HDSD mục 3.
+     Amount multiplier (next safety order)  1.00 / 1.10 / 1.20 / 1.27 / 1.50 / 1.80 / 2.00 / Custom  (mặc định 1.00)  — Hệ số nhân khối lượng cho mỗi lệnh an toàn kế tiếp. 1.00 = mọi lệnh bằng lot nhau.
+     Max basket SL distance (R from initial order entry)  1.0 R / 1.5 R / 2.0 R / 2.5 R / 3.0 R / 4.0 R / 5.0 R / Custom  (mặc định 5.0 R)  — Giới hạn xa nhất của SL rổ, tính bằng R từ giá vào lệnh đầu. SL rổ đặt tại mốc cấu trúc nhưng không bao giờ xa hơn mức này (HDSD mục 3).
+     Basket TP (R beyond average price)  0.3 R / 0.4 R / 0.5 R / 0.59 R / 0.75 R / 1.0 R / 1.5 R / 2.0 R / 2.5 R / 3.0 R / 4.0 R / Custom  (mặc định Custom, ô số = 1.002)  — TP chung của rổ, cách giá trung bình bao nhiêu R (R của lệnh đầu).
+     Hedge on opposite signal (needs Trade direction = Both)  Off / On  (mặc định Off)  — On: khi rổ đang mở mà logic gốc phát tín hiệu ngược chiều, EA mở lệnh đối ứng (HDSD mục 3). Cần Trade direction = Both; lệnh đối ứng tính vào Max safety orders.
+     Hedge amount multiplier (vs initial order; used only when hedge is on)  0.25 / 0.50 / 0.75 / 1.00 / 1.50 / 2.00 / Custom  (mặc định 1.00)  — Khối lượng lệnh đối ứng = lot lệnh đầu × hệ số này. Chỉ dùng khi có lệnh đối ứng.
+     Break-even at (R)  Off / 0.5 R / 1.0 R / 1.5 R / 2.0 R / Custom  (mặc định Off)  — Khi lãi của cả rổ đạt mức này (tính bằng R của lệnh đầu), dời SL về hoà vốn: lệnh đơn về giá vào, rổ về giá trung bình. Với rổ, chọn mức nhỏ hơn mức lãi tại TP rổ thì mới có tác dụng.
+     Single-trade RR (DCA off)  1.0 / 1.5 / 2.0 / 2.5 / 3.0 / Custom  (mặc định 3.0)  — Khi DCA = Off: TP lệnh đơn = điểm vào + RR × R.
+     Baskets  One basket per signal / One basket at a time  (mặc định One basket per signal)  — Per signal: mỗi tín hiệu mở rổ riêng, có thể có nhiều rổ cùng lúc. At a time: đang có rổ mở thì bỏ qua tín hiệu mới.
+
+  3. DISPLAY
+     Info panel on chart  On / Off  (mặc định On)  — Bảng thông tin góc trên trái biểu đồ (HDSD mục 9).
+     Draw basket levels  On / Off  (mặc định On)  — Vẽ đường mức của rổ trên biểu đồ (HDSD mục 9).
+
+  4. CUSTOM VALUES (used only when 'Custom' is selected above)
+     Custom fixed lots  số  (mặc định 1.0)  — Lot lệnh đầu khi Fixed lots = Custom.
+     Custom risk % per basket  số  (mặc định 1.0)  — Phần trăm vốn khi Risk % per basket = Custom.
+     Custom max safety orders  số  (mặc định 4)  — Số lệnh tối đa khi Max safety orders = Custom (≥ 0).
+     Custom safety order step (x ATR)  số  (mặc định 0.5572)  — Bước giá khi Safety order step = Custom (phải > 0).
+     Custom amount multiplier  số  (mặc định 1.0)  — Hệ số nhân khi Amount multiplier = Custom.
+     Custom max basket SL distance (R)  số  (mặc định 5.0)  — Giới hạn SL rổ (R) khi Max basket SL distance = Custom (phải > 0).
+     Custom basket TP (R)  số  (mặc định 1.002)  — TP rổ (R) khi Basket TP = Custom.
+     Custom break-even at (R)  số  (mặc định 0.0)  — Mức Break-even (R) khi Break-even at = Custom.
+     Custom single-trade RR  số  (mặc định 3.0)  — RR lệnh đơn khi Single-trade RR = Custom.
+     Custom hedge amount multiplier  số  (mặc định 1.0)  — Hệ số khối lượng lệnh đối ứng khi Hedge amount multiplier = Custom.
+
+  Thuật ngữ  Lệnh đầu = lệnh đầu tiên của một tín hiệu. Lệnh an toàn = các lệnh vào thêm cùng chiều,
+             thêm theo quy tắc của cấu hình này. Rổ lệnh = lệnh đầu + các lệnh vào thêm, đóng cùng
+             lúc tại SL/TP chung.
+             R = khoảng cách từ giá vào lệnh đầu tới SL của nó; các thông số DCA đo bằng R.
+
+  Cấu hình DCA của file này
+     - SL chung của rổ: đặt tại mốc cấu trúc thứ 5 (đáy (lệnh Mua) / đỉnh (lệnh Bán) của các phiên Asia · London · New York (giờ UTC) đã hình thành trước đó, xếp theo khoảng cách tới giá vào lệnh đầu từ gần tới xa), dùng chung cho mọi lệnh của rổ, không bao giờ xa hơn "Max basket SL distance" (mặc định 5.0 R tính từ giá vào lệnh đầu).
+     - Hedge on opposite signal (lệnh đối ứng): tuỳ chọn (mặc định Off). Cần Trade direction = Both; lệnh đối ứng tính vào Max safety orders; lệnh đối ứng đóng cùng lúc với rổ, không có SL/TP riêng.
+     - Bộ lọc tín hiệu lệnh đầu: phiên Asia (00:00–09:00 UTC); giờ Việt Nam = UTC + 7. Tắt khi Enable DCA = Off.

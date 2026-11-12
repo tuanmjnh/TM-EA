@@ -1,30 +1,25 @@
-# TM_TrendFollowerScalper tester presets
+# TM_TrendFollowerScalper Presets (.set)
 
 These `.set` files are MetaTrader 5 Strategy Tester input presets.
 
-## How to use
+## Preset Directory
 
-1. Copy the selected `.set` file to the terminal tester profile folder:
+### A. Realistic & Cost-Stress Presets (Recommended)
+- `TM_TFS_cost_stress_10000.set`: Deposit 10,000 USD, Risk 0.5%, ATR mult 2.0x, Spread filter 35 points, News filter ON. Used to evaluate real profitability against baseline after market friction.
+- `TM_TFS_realistic_500.set`: Deposit 500 USD, Risk 1.0% ($5.00 cash risk), ATR mult 2.0x, Spread filter 35 points, News filter ON. Recommended realistic baseline for small capital.
+- `TM_TFS_realistic_200.set`: Deposit 200 USD, Risk 1.5% ($3.00 cash risk), ATR mult 1.5x (tighter SL), Spread filter 30 points, News filter ON. Minimum viable deposit for micro-lot scalp on XAUUSD.
+- `TM_TFS_standard_1000.set`: Deposit 1,000 USD+, Risk 0.5%, ATR mult 2.0x, all protective filters active.
+- `TM_TFS_conservative_5000.set`: Deposit 5,000 USD+, Risk 0.25%, ATR mult 2.5x, all protective filters active.
 
-   `<Terminal Data>\MQL5\Profiles\Tester\`
+### B. Micro Account Presets (50 USD & 100 USD)
+- `TM_TFS_small_100.set`: Deposit 100 USD, Risk 3.0% ($3.00 cash risk), ATR mult 1.2x (tight SL), Spread guard 350 points, News filter ON, Entry_Mode 3 (Pullback & Breakout).
+- `TM_TFS_small_50.set`: Deposit 50 USD, Risk 5.0% ($2.50 cash risk), ATR mult 1.0x (very tight SL), Spread guard 350 points, News filter ON, Entry_Mode 3 (Pullback & Breakout). *Khuyến nghị: Với vốn 50 USD, sử dụng tài khoản Cent (USC) để rủi ro về mức an toàn 1.0% ($0.50).*
 
-2. Set `ExpertParameters` in `TM_TFS_backtest.ini`:
+## How to Load in MT5 Strategy Tester
 
-   `ExpertParameters=TM_TFS_small_50.set`
-
-3. Run:
-
-   `terminal64.exe /config:TM_TFS_backtest.ini`
-
-## Files
-
-- `TM_TFS_small_50.set`: ~50 USD accounts, risk 10%, ATR mult 1.0, diagnostic filters relaxed.
-- `TM_TFS_small_100.set`: ~100 USD accounts, risk 5%, ATR mult 1.2, diagnostic filters relaxed.
-- `TM_TFS_standard_1000.set`: ~1000 USD and above, risk 0.5%, ATR mult 2.0, normal filters.
-- `TM_TFS_conservative_5000.set`: ~5000 USD and above, risk 0.25%, ATR mult 2.5, normal filters.
-
-## Notes
-
-- `Max_Spread_Points=10000` and `News_Enable=false` in small presets are for diagnostic backtests only.
-- Do not use small-account risk settings on large accounts without reviewing drawdown.
-- `Use_TP` remains false by design; every trade must have a valid SL.
+1. Direct in MT5 GUI:
+   - Open Strategy Tester (`Ctrl+R`).
+   - Select Expert: `TM_TrendFollowerScalper.ex5`.
+   - Right-click in the Inputs tab -> **Load** -> select the desired `.set` file.
+2. Or copy to terminal tester profile folder:
+   `C:\Users\tuanmjnh\AppData\Roaming\MetaQuotes\Terminal\53785E099C927DB68A545C249CDBCE06\MQL5\Profiles\Tester\`

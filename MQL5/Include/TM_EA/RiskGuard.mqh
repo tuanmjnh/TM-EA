@@ -154,7 +154,7 @@ public:
       double spreadPoints = (ask - bid) / m_point;
       if(spreadPoints > (double)maxSpreadPoints)
       {
-         reason = "spread too high";
+         reason = "spread too high (current=" + DoubleToString(spreadPoints, 1) + " max=" + IntegerToString(maxSpreadPoints) + ")";
          return false;
       }
 
@@ -182,8 +182,13 @@ public:
          int calendarResult = CalendarValueHistory(values, fromTime, toTime, NULL, NULL);
          if(calendarResult < 0)
          {
-            reason = "news calendar unavailable";
-            return false;
+            // In Strategy Tester, economic calendar history is typically not supplied by the broker tester server.
+            // Only fail-safe block if running on live/demo forward trading.
+            if(!((bool)MQLInfoInteger(MQL_TESTER)))
+            {
+               reason = "news calendar unavailable";
+               return false;
+            }
          }
          int count = ArraySize(values);
          for(int i = 0; i < count; i++)

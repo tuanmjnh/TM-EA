@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| EntryEngine.mqh                                                  |
-//| Pullback entry detection on completed bars.                      |
+//| Pullback and Breakout entry detection on completed bars.         |
 //+------------------------------------------------------------------+
 #ifndef TM_EA_ENTRYENGINE_MQH
 #define TM_EA_ENTRYENGINE_MQH
@@ -106,7 +106,7 @@ public:
       }
 
       // Convert the configured pip buffer to a price distance. A standard pip is
-      // treated as 10 points for this first implementation and can be refined.
+      // treated as 10 points for this implementation.
       double bufferPrice = m_point * (double)m_pullbackBufferPips * 10.0;
 
       if(trendState == TREND_STATE_UP)
@@ -149,6 +149,113 @@ public:
          else
          {
             signal.reason = "pullback sell conditions not met";
+         }
+      }
+
+      return signal;
+   }
+
+   SSignal EvaluateBreakout(const ENUM_TREND_STATE trendState,
+                            const double atrValue,
+                            const double breakoutK)
+   {
+      SSignal signal;
+      signal.valid = false;
+      signal.direction = 0;
+      signal.setup = SETUP_NONE;
+      signal.signalBarTime = 0;
+      signal.entryReference = 0.0;
+      signal.invalidationLevel = 0.0;
+      signal.reason = "no breakout signal";
+
+      if(trendState == TREND_STATE_NONE)
+      {
+         signal.reason = "trend state is none";
+         return signal;
+      }
+
+      if(atrValue <= 0.0)
+      {
+         signal.reason = "invalid ATR value for breakout";
+         return signal;
+      }
+
+      if(BarsCalculated(m_hPullbackEma) < m_pullbackEmaPeriod + 3)
+      {
+         signal.reason = "EMA is still calculating";
+         return signal;
+      }
+
+      double emaBuffer[3];
+      if(CopyBuffer(m_hPullbackEma, 0, 0, 3, emaBuffer) != 3)
+      {
+         signal.reason = "failed to copy EMA buffer for breakout";
+         return signal;
+      }
+
+      // Buffer[2] is bar 0 (current), Buffer[1] is bar 1 (completed), Buffer[0] is bar 2.
+      double emaPrev = emaBuffer[0];      // Bar 2 EMA
+      double emaCompleted = emaBuffer[1]; // Bar 1 EMA
+
+      double completedOpen  = iOpen(m_symbol, m_entryTimeframe, 1);
+      double completedHigh  = iHigh(m_symbol, m_entryTimeframe, 1);
+      double completedLow   = iLow(m_symbol, m_entryTimeframe, 1);
+      double completedClose = iClose(m_symbol, m_entryTimeframe, 1);
+      datetime completedBarTime = iTime(m_symbol, m_entryTimeframe, 1);
+
+      double prevHigh = iHigh(m_symbol, m_entryTimeframe, 2);
+      double prevLow  = iLow(m_symbol, m_entryTimeframe, 2);
+
+      if(completedBarTime == 0 || completedBarTime == m_lastSignalBarTime)
+      {
+         signal.reason = "duplicate or unavailable signal bar";
+         return signal;
+      }
+
+      double breakoutDist = breakoutK * atrValue;
+
+      if(trendState == TREND_STATE_UP)
+      {
+         bool priceBreakout = (completedClose > prevHigh + breakoutDist);
+         bool emaSlopeUp    = (emaCompleted > emaPrev);
+         bool bullishClose  = (completedClose > completedOpen);
+
+         if(priceBreakout && emaSlopeUp && bullishClose)
+         {
+            signal.valid = true;
+            signal.direction = 1;
+            signal.setup = SETUP_BREAKOUT;
+            signal.signalBarTime = completedBarTime;
+            signal.entryReference = completedClose;
+            signal.invalidationLevel = completedLow;
+            signal.reason = "breakout buy confirmed";
+            m_lastSignalBarTime = completedBarTime;
+         }
+         else
+         {
+            signal.reason = "breakout buy conditions not met";
+         }
+      }
+      else if(trendState == TREND_STATE_DOWN)
+      {
+         bool priceBreakout = (completedClose < prevLow - breakoutDist);
+         bool emaSlopeDown  = (emaCompleted < emaPrev);
+         bool bearishClose  = (completedClose < completedOpen);
+
+         if(priceBreakout && emaSlopeDown && bearishClose)
+         {
+            signal.valid = true;
+            signal.direction = -1;
+            signal.setup = SETUP_BREAKOUT;
+            signal.signalBarTime = completedBarTime;
+            signal.entryReference = completedClose;
+            signal.invalidationLevel = completedHigh;
+            signal.reason = "breakout sell confirmed";
+            m_lastSignalBarTime = completedBarTime;
+         }
+         else
+         {
+            signal.reason = "breakout sell conditions not met";
          }
       }
 

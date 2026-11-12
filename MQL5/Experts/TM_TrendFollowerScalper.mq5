@@ -122,7 +122,7 @@ int OnInit()
    }
 
    g_logger.Init(_Symbol, MagicNumber);
-   g_logger.Log("EA initialized. Symbol specs, trend filter, pullback entry, initial SL, risk-volume, trade executor, trailing, risk guards and dashboard loaded.");
+   g_logger.Log("EA initialized. Symbol specs, trend filter, pullback & breakout entry, initial SL, risk-volume, trade executor, trailing, risk guards and dashboard loaded.");
 
    if(g_trend.Refresh())
    {
@@ -197,7 +197,7 @@ void OnTick()
 
    g_lastEntryBarTime = currentEntryBarTime;
 
-   if((Entry_Mode == 1 || Entry_Mode == 3) && currentState != TREND_STATE_NONE)
+   if(currentState != TREND_STATE_NONE)
    {
       string guardReason = "";
       if(!g_riskGuard.CanOpenNewEntry(Max_Daily_Loss_Percent,
@@ -212,7 +212,21 @@ void OnTick()
          return;
       }
 
-      SSignal signal = g_entry.EvaluatePullback(currentState);
+      SSignal signal;
+      signal.valid = false;
+
+      // 1. Evaluate Pullback if mode is Pullback (1) or Both (3)
+      if(Entry_Mode == 1 || Entry_Mode == 3)
+      {
+         signal = g_entry.EvaluatePullback(currentState);
+      }
+
+      // 2. If no Pullback signal, evaluate Breakout if mode is Breakout (2) or Both (3)
+      if(!signal.valid && (Entry_Mode == 2 || Entry_Mode == 3))
+      {
+         signal = g_entry.EvaluateBreakout(currentState, atrValue, BreakoutK);
+      }
+
       if(!signal.valid)
          return;
 
@@ -238,9 +252,11 @@ void OnTick()
                                                   g_symbol.StopLevelPoints);
       }
 
+      string setupStr = (signal.setup == SETUP_BREAKOUT) ? "BREAKOUT" : "PULLBACK";
+
       if(stopLoss <= 0.0)
       {
-         g_logger.Log("Pullback signal skipped: invalid initial SL. " + signal.reason +
+         g_logger.Log(setupStr + " signal skipped: invalid initial SL. " + signal.reason +
                       " entry=" + DoubleToString(signal.entryReference, 5) +
                       " invalidation=" + DoubleToString(signal.invalidationLevel, 5) +
                       " atr=" + DoubleToString(atrValue, 5) +
@@ -262,33 +278,35 @@ void OnTick()
 
       if(volume <= 0.0)
       {
-         g_logger.Log("Pullback signal skipped: " + volumeReason +
+         g_logger.Log(setupStr + " signal skipped: " + volumeReason +
                       " (signalBarTime=" + TimeToString(signal.signalBarTime, TIME_DATE | TIME_MINUTES) + ")");
          return;
       }
 
       if(g_trade.CountOpenPositions(_Symbol) >= Max_Concurrent_Positions)
       {
-         g_logger.Log("Pullback signal skipped: max concurrent positions reached.");
+         g_logger.Log(setupStr + " signal skipped: max concurrent positions reached.");
          return;
       }
 
       ulong ticket = 0;
       bool opened = false;
+      string comment = TradeComment + "_" + setupStr;
+
       if(signal.direction > 0)
-         opened = g_trade.OpenBuy(_Symbol, volume, stopLoss, TradeComment, ticket);
+         opened = g_trade.OpenBuy(_Symbol, volume, stopLoss, comment, ticket);
       else
-         opened = g_trade.OpenSell(_Symbol, volume, stopLoss, TradeComment, ticket);
+         opened = g_trade.OpenSell(_Symbol, volume, stopLoss, comment, ticket);
 
       if(!opened)
       {
-         g_logger.Log("Order execution failed. Retcode=" + IntegerToString(g_trade.LastRetcode()) +
+         g_logger.Log("Order execution failed (" + setupStr + "). Retcode=" + IntegerToString(g_trade.LastRetcode()) +
                       " requestedVolume=" + DoubleToString(volume, 2) +
                       " stopLoss=" + DoubleToString(stopLoss, 5));
          return;
       }
 
-      g_logger.Log("Order opened: ticket=" + IntegerToString((int)ticket) +
+      g_logger.Log("Order opened (" + setupStr + "): ticket=" + IntegerToString((int)ticket) +
                    " price=" + DoubleToString(g_trade.LastPrice(), 5) +
                    " volume=" + DoubleToString(volume, 2) +
                    " SL=" + DoubleToString(stopLoss, 5) +

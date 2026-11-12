@@ -1,6 +1,47 @@
-; Preset for larger/conservative accounts around 5000 USD and above.
-; Lower risk and wider trailing stop.
-RiskPercentPerTrade=0.25
+; TM-EA - Conservative Large Account Preset (5,000 USD+)
+; Target: XAUUSDm on M5 (Exness point = 0.001).
+; Low risk, wider trailing stop (2.5x ATR) to capture large trend waves without getting stopped by noise.
+; Risk: 0.25% ($12.50 cash risk per trade) allowing 0.02 - 0.15 lot positions.
+; Entry_Mode: 3 (Both Pullback and Breakout enabled).
+
+Enabled=true
+MagicNumber=123456
+TradeComment=TM_TFS_5000
+
+;--- Trend Filter (M15)
+Trend_Timeframe=15
+FastEMA_HTF=50
+SlowEMA_HTF=200
+ADX_Period=14
+ADX_Threshold=25.0
+
+;--- Entry (M5 Pullback + Breakout)
+Entry_Timeframe=5
+Entry_Mode=3
+PullbackEMA=20
+Pullback_Buffer_pips=2
+ATR_Channel_Period=14
+BreakoutK=0.7
+
+;--- Exit / Trailing (No TP)
+Use_TP=false
 Trail_ATR_Mult=2.5
-Max_Spread_Points=35
+Trail_ATR_Period=14
+Activate_After_Profit_pips=5.0
+Trail_Step_pips=2.5
+Breakeven_After_pips=10.0
+
+;--- Risk Management
+RiskPercentPerTrade=0.25
+Min_Volume=0.01
+Max_Volume=0.15
+Max_Concurrent_Positions=1
+
+;--- Risk Guards (REALISTIC COSTS ACTIVE)
+Max_Daily_Loss_Percent=1.5
+Max_Consecutive_Losses=4
+CoolDown_Minutes=60
+Max_Spread_Points=350
 News_Enable=true
+News_Buffer_Minutes=20
+Use_Session_Filter=true

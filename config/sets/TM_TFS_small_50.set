@@ -1,7 +1,47 @@
-; Preset for small accounts around 50 USD.
-; Higher risk and shorter SL are used so the broker minimum lot does not exceed the risk cap.
-; Diagnostic run: spread and news filters are relaxed.
-RiskPercentPerTrade=10
+; TM-EA - Micro Account Preset (50 USD)
+; Target: XAUUSDm on M5 (Exness point = 0.001).
+; Optimized: Replaces 10% risk hack with 5.0% ($2.50 risk), spread guard 350 points, news filter ON.
+; Note: For strict 1-2% risk on 50 USD, recommend using an Exness Cent (USC) account (50 USD = 5,000 USC).
+; Entry_Mode: 3 (Both Pullback and Breakout enabled).
+
+Enabled=true
+MagicNumber=123456
+TradeComment=TM_TFS_50
+
+;--- Trend Filter (M15)
+Trend_Timeframe=15
+FastEMA_HTF=50
+SlowEMA_HTF=200
+ADX_Period=14
+ADX_Threshold=25.0
+
+;--- Entry (M5 Pullback + Breakout)
+Entry_Timeframe=5
+Entry_Mode=3
+PullbackEMA=20
+Pullback_Buffer_pips=2
+ATR_Channel_Period=14
+BreakoutK=0.7
+
+;--- Exit / Trailing (No TP)
+Use_TP=false
 Trail_ATR_Mult=1.0
-Max_Spread_Points=10000
-News_Enable=false
+Trail_ATR_Period=14
+Activate_After_Profit_pips=2.5
+Trail_Step_pips=1.5
+Breakeven_After_pips=4.0
+
+;--- Risk Management
+RiskPercentPerTrade=5.0
+Min_Volume=0.01
+Max_Volume=0.01
+Max_Concurrent_Positions=1
+
+;--- Risk Guards (REALISTIC COSTS ACTIVE)
+Max_Daily_Loss_Percent=6.0
+Max_Consecutive_Losses=3
+CoolDown_Minutes=60
+Max_Spread_Points=350
+News_Enable=true
+News_Buffer_Minutes=20
+Use_Session_Filter=true
