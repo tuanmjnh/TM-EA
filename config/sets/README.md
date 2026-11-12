@@ -5,9 +5,9 @@ These `.set` files are MetaTrader 5 Strategy Tester input presets.
 ## Preset Directory
 
 ### A. Realistic & Cost-Stress Presets (Recommended)
-- `TM_TFS_cost_stress_10000.set`: Deposit 10,000 USD, Risk 0.5%, ATR mult 2.0x, Spread filter 35 points, News filter ON. Used to evaluate real profitability against baseline after market friction.
-- `TM_TFS_realistic_500.set`: Deposit 500 USD, Risk 1.0% ($5.00 cash risk), ATR mult 2.0x, Spread filter 35 points, News filter ON. Recommended realistic baseline for small capital.
-- `TM_TFS_realistic_200.set`: Deposit 200 USD, Risk 1.5% ($3.00 cash risk), ATR mult 1.5x (tighter SL), Spread filter 30 points, News filter ON. Minimum viable deposit for micro-lot scalp on XAUUSD.
+- `TM_TFS_cost_stress_10000.set`: Deposit 10,000 USD, Risk 0.5%, ATR mult 2.0x, Spread filter **350 points**, News filter ON. For the (still missing) valid cost-stress run.
+- `TM_TFS_realistic_500.set`: Deposit 500 USD, Risk 1.0% ($5.00 cash risk), ATR mult 2.0x, Spread filter **350 points**, News filter ON. **Tested → PF 1.09 (negative / break-even).**
+- `TM_TFS_realistic_200.set`: Deposit 200 USD, Risk **2.0% ($4.00 cash risk)**, ATR mult 1.5x (tighter SL), Spread filter **350 points**, News filter ON. **Tested → PF 0.58 (FAIL).**
 - `TM_TFS_standard_1000.set`: Deposit 1,000 USD+, Risk 0.5%, ATR mult 2.0x, all protective filters active.
 - `TM_TFS_conservative_5000.set`: Deposit 5,000 USD+, Risk 0.25%, ATR mult 2.5x, all protective filters active.
 

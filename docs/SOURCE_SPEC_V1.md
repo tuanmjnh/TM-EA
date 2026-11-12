@@ -213,15 +213,20 @@ số bảo vệ vốn, theo khuyến nghị của `ARCHITECTURE.md` mục 4.5.
 | `RiskPercentPerTrade` | double | 0.5 | 0.5 | % vốn rủi ro/lệnh |
 | `Min_Volume` | double | 0.01 | 0.01 | Lot tối thiểu |
 | `Max_Volume` | double | 0.05 | 0.05 | Lot tối đa |
-| `Max_Concurrent_Positions` | int | 2 | **1** | Số lệnh mở đồng thời tối đa |
+| `Max_Concurrent_Positions` | int | 1 | 1 | Số lệnh mở đồng thời tối đa |
 | **Risk Guard** |||||
-| `Max_Daily_Loss_Percent` | double | 5.0 | **1.5** | Dừng ngày khi lỗ ≤ ngưỡng này |
+| `Max_Daily_Loss_Percent` | double | 1.5 | 1.5 | Dừng ngày khi lỗ ≤ ngưỡng này |
 | `Max_Consecutive_Losses` | int | 4 | 4 | Nghỉ sau chuỗi thua |
 | `CoolDown_Minutes` | int | 30 | 30 | Thời gian nghỉ |
 | `Max_Spread_Points` | int | 35 | 35 | Chặn vào lệnh khi spread lớn |
 | `News_Enable` | bool | true | true | Bật news filter |
 | `News_Buffer_Minutes` | int | 20 | 20 | Chặn quanh tin |
 | `Use_Session_Filter` | bool | true | true | Chỉ giao dịch khung giờ tốt |
+
+> **Audit 2026-11-12:** cột "Giá trị mặc định" đã sửa cho khớp `Inputs.mqh`
+> (`Max_Concurrent_Positions` 2→1, `Max_Daily_Loss_Percent` 5.0→1.5).
+> Ghi chú sai lệch đã biết: `ATR_Channel_Period` hiện **không được đọc** trong source —
+> breakout dùng ATR(`Trail_ATR_Period`). Xem `TECHNICAL_AUDIT.md` §5 (BUG-001).
 
 ---
 

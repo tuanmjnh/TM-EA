@@ -54,4 +54,13 @@ TM-EA/
 
 ## Current status
 
-Core EA implementation complete (Pullback & Breakout modes implemented in `MQL5/Include/TM_EA/`, compiled binary `TM_TrendFollowerScalper.ex5` verified with 0 errors/0 warnings). Presets standardized in `config/sets/`. Currently in cost-stress testing and demo forward validation phase.
+Logic implemented (Pullback & Breakout in `MQL5/Include/TM_EA/`) and compiling with `0 errors / 0 warnings` (build logs in `tests/compile-*.log`). **Not yet verified in a running terminal.**
+
+Audit findings that block "done" (see `docs/TECHNICAL_AUDIT.md`, `docs/SOURCE_REPORT_CONSISTENCY.md`):
+
+- The committed `TM_TrendFollowerScalper.ex5` is **older than** `RiskGuard.mqh` — rebuild required (BUG-006).
+- No valid cost-stress run exists; the `cost_stress_10000` report duplicates `baseline_10000` (BUG-005).
+- Most realistic-capital presets (200–1000 USD) backtest **negative**; `small_50` DD exceeds the 20% gate.
+- Open bugs: news filter inactive in tester, hard-coded FOK filling, consecutive-loss double-count on restart, dead `ATR_Channel_Period` — see `tests/BUG_REPRODUCTIONS.md`.
+
+Open validation tasks and honest PASS/FAIL/BLOCKED/NOT RUN statuses are in `tests/VALIDATION_RESULTS.md` and `reports/backtests/MANIFEST_INDEX.md`. **No backtest result here is proof of a profitable strategy.**

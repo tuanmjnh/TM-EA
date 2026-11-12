@@ -5,11 +5,12 @@
 **Strategy:** TM_TFS_V1  
 **Platform:** MetaTrader 5 / MQL5  
 **Symbol / TF:** XAUUSD (XAUUSDm) / M5  
-**Last updated:** 2026-11-12  
-**Status:** Triển khai hoàn tất toàn bộ logic (Phase 1-8 Pullback & Breakout, compile 0 errors/0 warnings). Đã chuẩn hóa preset vốn thực tế và cấu hình profile sẵn sàng cho MT5 Strategy Tester.
+**Last updated:** 2026-11-12 (audit v1.3)  
+**Status:** Logic đã triển khai (Phase 1-8 Pullback & Breakout) và biên dịch `0 errors/0 warnings` (có build log). **NHƯNG chưa được xác minh bằng test runtime** và element evidence còn lỗ hổng: binary EX5 cũ hơn source (`RiskGuard.mqh`), report cost-stress không hợp lệ, phần lớn preset vốn thực tế thất bại. Xem `TECHNICAL_AUDIT.md`, `SOURCE_REPORT_CONSISTENCY.md`, `tests/VALIDATION_RESULTS.md`.
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
-> Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.
+> Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  
+> Audit kỹ thuật & bằng chứng: `TECHNICAL_AUDIT.md` (P1), `SOURCE_REPORT_CONSISTENCY.md` (P0), `CHANGELOG.md`.
 
 ---
 
@@ -37,6 +38,9 @@ TM-EA/
 │   ├── MASTER.md               # File này - nguồn tổng hợp + manual cho AI
 │   ├── ARCHITECTURE.md         # Brief triển khai (mục 2 Safety rules thắng khi xung đột)
 │   ├── SOURCE_SPEC_V1.md       # Nguồn yêu cầu chiến lược (single source of truth)
+│   ├── TECHNICAL_AUDIT.md      # P1: audit copy/shift/news/filling/riskguard
+│   ├── SOURCE_REPORT_CONSISTENCY.md # P0: đối chiếu MASTER ↔ source ↔ report
+│   ├── CHANGELOG.md            # Lịch sử thay đổi (định dạng §6.6)
 │   └── archive/v1/             # Tài liệu cũ, chỉ để tham khảo, read-only
 ├── MQL5/
 │   ├── Experts/
@@ -122,11 +126,33 @@ TM-EA/
 
 ---
 
-## 4. KẾT QUẢ BACKTEST HIỆN TẠI
+## 4. KẾT QUẢ BACKTEST HIỆN TẠI (đã audit — v1.3)
 
-Toàn bộ báo cáo backtest hiện được lưu trữ theo cấu trúc thư mục chuẩn: `reports/backtests/TM_TrendFollowerScalper/<PresetName>/`.
+> ⚠️ **Viết lại ngày 2026-11-12.** Bản trước tuyên bố cost-stress "PASSED XUẤT SẮC" — tuyên bố đó **đã bị rút lại** vì report cost-stress trùng khít report baseline (BUG-005) và không có commission/slippage. Chi tiết: `SOURCE_REPORT_CONSISTENCY.md` §5, `reports/backtests/MANIFEST_INDEX.md`. **Không con số nào dưới đây là bằng chứng chiến lược đã được xác nhận.**
 
-### 4.1 Báo cáo Chịu tải Chi phí Vốn lớn (Cost Stress Test 10.000 USD) - `TM_TFS_cost_stress_10000`
+Điều kiện chung của **mọi** run: 3 tháng (`2026.08.01–2026.10.31`), 1 symbol (XAUUSDm), commission = 0, `News_Enable=true` **vô hiệu trong tester** (BUG-004), không OOS/walk-forward, binary EX5 cũ hơn source (BUG-006).
+
+### 4.1 Bảng tổng hợp thực tế
+
+| Preset | Deposit | Quality | Risk% | Net | PF | Trades | EqDD | Phân loại |
+|---|---|---|---|---|---|---|---|---|
+| `baseline_10000` | 10 000 | **3% real ticks** | 0.5 | +1 509.49 | 2.45 | 878 | 2.21% | DIAGNOSTIC |
+| `cost_stress_10000` | 10 000 | 98% real ticks | 0.5 | +1 509.49 | 2.45 | 878 | 2.21% | **INVALID (trùng baseline)** |
+| `conservative_5000` | 5 000 | 98% real ticks | 0.25 | +149.96 | 1.73 | 620 | 0.86% | DIAGNOSTIC |
+| `realistic_500` | 500 | **3% real ticks** | 1.0 | +0.80 | 1.09 | 53 | 1.96% | NEGATIVE |
+| `realistic_200` | 200 | 98% real ticks | 2.0 | −10.87 | 0.58 | 69 | 8.05% | **FAIL** |
+| `small_100` | 100 | 98% real ticks | 3.0 | −9.38 | 0.16 | 44 | 10.35% | **FAIL** |
+| `small_50` (.13.50) | 50 | 98% real ticks | 8.0 | −10.86 | 0.15 | 47 | 22.57% | **FAIL** |
+| `small_50` (.14.46) | **100** | 98% real ticks | 5.0 | −50.92 | 0.14 | 159 | 51.76% | **FAIL (severe)** |
+| `standard_1000` | 1 000 | 98% real ticks | 0.5 | −7.14 | 0.31 | 54 | 1.24% | **FAIL** |
+| `tmp` (.12.00) | 100 | **3% real ticks** | 5.0 | +66.85 | 1.39 | 647 | 23.97% | DIAGNOSTIC |
+
+### 4.2 Cost-stress: CHƯA CHẠY HỢP LỆ
+
+- `TM_TFS_cost_stress_10000/ReportTester-…13.30.html` **trùng nội dung** với `TM_TFS_baseline_10000/…13.24.html` (39 690/39 690 dòng, khác duy nhất chuỗi `History Quality`). Không thể là 2 lần chạy độc lập.
+- Kể cả tính là thật: `Max_Spread_Points=350` (không phải spread nới), `News_Enable` vô hiệu trong tester, **commission = 0**, không slippage. → **không phải cost-stress**.
+
+### 4.3 Chi tiết report .13.30 (INVALID — chỉ tham chiếu lịch sử)
 - **File báo cáo:** `reports/backtests/TM_TrendFollowerScalper/TM_TFS_cost_stress_10000/ReportTester-464140826_2026.11.12.13.30.html`
 - **Thông số:** Vốn 10.000 USD, Exness-MT5Trial17, đòn bẩy 1:100, M5, XAUUSDm, 2026.08.01 - 2026.10.31 (3 tháng).
 - **Chất lượng kiểm thử:** **98% real ticks (18.969.666 tick thực Exness)**, `Max_Spread_Points=350`, `News_Enable=true`.
@@ -136,25 +162,25 @@ Toàn bộ báo cáo backtest hiện được lưu trữ theo cấu trúc thư m
   - Số lệnh: **878 trades** (1.756 deals)
   - Profit Factor: **2.45** | Expected Payoff: **1.72 USD**
   - Drawdown lớn nhất: **Equity DD 2.21% (240.52 USD)**
-- **Đánh giá:** **PASSED XUẤT SẮC**. Khi đối mặt với 18.9 triệu tick thực tế, ma sát spread và tin tức thực, EA đạt Profit Factor 2.45 và Drawdown tối đa chỉ 2.21%. Đây là ứng viên mạnh nhất cho Forward Test.
+- **Đánh giá (RÚT LẠI):** Tuyên bố "PASSED" cũ **SAI**. Report này trùng khít `baseline_10000` (chỉ khác nhãn `History Quality`) → không phải lần chạy độc lập, không phải cost-stress (commission 0, spread cap 350, news vô hiệu trong tester). Xem BUG-005.
 
-### 4.2 Báo cáo Bảo toàn vốn (Conservative 5.000 USD) - `TM_TFS_conservative_5000`
+### 4.4 Chi tiết lịch sử — Conservative 5.000 USD (`TM_TFS_conservative_5000`)
 - **File báo cáo:** `reports/backtests/TM_TrendFollowerScalper/TM_TFS_conservative_5000/ReportTester-464140826_2026.11.12.13.27.html`
 - **Thông số:** Vốn 5.000 USD, 98% real ticks, M5 XAUUSDm.
 - **Kết quả:** Net Profit **+149.96 USD**, PF **1.73**, 620 trades, Equity DD siêu thấp **0.86% (44.42 USD)**.
 
-### 4.3 Báo cáo thực tế Vốn nhỏ (50 USD - 200 USD)
+#### Vốn nhỏ (50–100 USD)
 - **Vốn 100 USD (`tmp/TM_TFS_small_50_2026.11.12_12.00.html`):** Lãi **+66.85 USD**, 647 lệnh, PF 1.39 (trên 3% real ticks / generated ticks).
 - **Vốn 50 USD (`TM_TFS_small_50` trên 98% real ticks):** Lỗ **-10.86 USD** (47 lệnh).
   - *Nguyên nhân:* Bị ảnh hưởng bởi bẫy tê liệt vốn nhỏ (Undercapitalization Trap) khi dời trailing quá hẹp (25 cent) bị spread vàng 20-35 cent quét sớm, và khi số dư tụt xuống 39.14 USD, ngân sách rủi ro bị nhỏ hơn 0.01 lot khiến bot ngưng giao dịch từ ngày 05/10.
 
-### 4.4 CAVEATS (Đọc trước khi tin bất kỳ con số nào)
+### 4.5 CAVEATS (Đọc trước khi tin bất kỳ con số nào)
 
-> 🔺 **Số ở 4.1 và 4.2 là best case / trần trên**, KHÔNG phải số kỳ vọng thực tế. Spread bị nới (`Max_Spread_Points=10000`), tắt lọc tin, chưa trừ commission & slippage thực tế. Với 296 - 751 lệnh scalp vàng, chi phí giao dịch thực tế sẽ bào mòn phần lớn lợi nhuận này.
+> 🔺 **Không số nào ở §4 là bằng chứng chiến lược có lãi.** Tất cả: 3 tháng, 1 symbol, commission 0, news vô hiệu trong tester, không OOS. Report `.13.30` "98%" trùng khít `baseline_10000` "3%" (BUG-005) → không dùng làm bằng chứng.
 >
-> 🔺 Preset `TM_TFS_small_50.set` đặt `RiskPercentPerTrade=10` (10%/lệnh) - con số này **phá vỡ nguyên tắc an toàn vốn** cốt lõi và làm Relative Drawdown lên tới **35.82%**. Preset này chỉ dùng để ép bot ra lệnh trên tài khoản 50 USD, **tuyệt đối không dùng cho tài khoản tiền thật**.
+> 🔺 Preset vốn nhỏ dùng risk cao (`small_50.set` = **5.0%**, run = **8.0%**) — **phá vỡ nguyên tắc an toàn vốn**; chỉ dùng để ép bot ra lệnh; **tuyệt đối không dùng tài khoản thật**. (MASTER bản cũ ghi nhầm 10%.)
 >
-> 🔺 Chưa có dữ liệu Forward Test thực tế. Hiện tại EA chỉ được coi là ứng viên cần stress-test chi phí.
+> 🔺 Chưa có Forward Test. EA hiện là **ứng viên R&D cần sửa bug + chạy cost-stress hợp lệ + OOS**, chưa được xác nhận. Bug mở: `tests/BUG_REPRODUCTIONS.md` (BUG-001…009).
 
 ---
 
@@ -173,24 +199,33 @@ flowchart TD
     S5 --> S6["Bước 5: Thẩm định Go-Live<br>(Checklist an toàn trước khi vào vốn thật)"]
 ```
 
+### Bước 0: Sửa lỗi kỹ thuật trước khi test lại (blockers)
+- [ ] BUG-006: Biên dịch lại EX5 sau khi `RiskGuard.mqh` đổi; ghi compile log + hash mới.
+- [ ] BUG-001: Quyết định `ATR_Channel_Period` cho breakout (hoặc bỏ input, ghi rõ).
+- [ ] BUG-002: Chọn filling mode động từ `SYMBOL_FILLING_MODE`; xử lý retcode/partial.
+- [ ] BUG-003: Persist `m_lastProcessedDeal` để consecutive-loss idempotent qua restart.
+- [ ] BUG-004: Xây historical news adapter cho Strategy Tester (P1.5).
+- [ ] BUG-005/009: Dọn report trùng & sai thư mục (chỉ đổi metadata; giữ file gốc).
+- [ ] BUG-007/008: Cân nhắc cộng spread/commission vào sizing và dùng volume thật cho margin check.
+
 ### Bước 1: Cost-Stress Testing (Kiểm tra chịu tải chi phí)
-- [x] Tạo preset chuẩn hóa: `config/sets/TM_TFS_cost_stress_10000.set` (bỏ override spread 10000, đặt `Max_Spread_Points=35`, `News_Enable=true`).
+- [x] Tạo preset `config/sets/TM_TFS_cost_stress_10000.set` — thực tế đặt `Max_Spread_Points=**350**` (không phải 35), `News_Enable=true`. Commission trong tester = 0 (chưa stress được).
 - [x] Tạo cấu hình Strategy Tester: `TM_TFS_CostStress_10000.ini` đã được lưu vào profile của MT5 Terminal.
 - [ ] Chạy Strategy Tester trên MT5 GUI với profile `TM_TFS_CostStress_10000.ini` (hoặc load preset `TM_TFS_cost_stress_10000.set`).
-- [ ] Xuất manifest backtest cost-stress và lưu vào `reports/backtests/`.
+- [ ] Xuất manifest backtest cost-stress **hợp lệ** (commission + slippage + news adapter). Report `.13.30` hiện có **KHÔNG hợp lệ** (trùng baseline — BUG-005).
 
 ### Bước 2: Cân chỉnh Sizing cho Vốn Thực tế (Realistic Capital Calibration)
 - [x] Xóa bỏ tư duy ép rủi ro 10% trên tài khoản 50 USD.
 - [x] Thiết lập baseline cho vốn nhỏ an toàn: **Vốn 200 - 500 USD**, cấu hình `RiskPercentPerTrade = 1.0% - 1.5%`.
-- [x] Tạo preset `TM_TFS_realistic_500.set` (Vốn 500 USD, risk 1%, ATR mult 2.0x, spread 35, news filter ON).
-- [x] Tạo preset `TM_TFS_realistic_200.set` (Vốn 200 USD, risk 1.5%, ATR mult 1.5x, spread 30, news filter ON).
+- [x] Tạo preset `TM_TFS_realistic_500.set` (Vốn 500 USD, risk 1.0%, ATR mult 2.0x, spread **350**, news ON). **Đã test → PF 1.09 (negative).**
+- [x] Tạo preset `TM_TFS_realistic_200.set` (Vốn 200 USD, risk **2.0%**, ATR mult 1.5x, spread **350**, news ON). **Đã test → PF 0.58 (FAIL).**
 - [x] Copy toàn bộ preset vào thư mục Tester Profiles của MT5 Terminal.
 
 ### Bước 3: Hoàn thiện Logic còn thiếu
 - [x] Hoàn thiện nhánh **Breakout Mode** (`Entry_Mode = 2` và `3`) trong [`MQL5/Include/TM_EA/EntryEngine.mqh`](file:///d:/Applications/TM-EA/MQL5/Include/TM_EA/EntryEngine.mqh) theo đúng mô tả của `SOURCE_SPEC_V1.md` (kênh ATR Breakout + bộ lọc độ dốc EMA).
 - [x] Tích hợp điều phối Pullback & Breakout trong [`MQL5/Experts/TM_TrendFollowerScalper.mq5`](file:///d:/Applications/TM-EA/MQL5/Experts/TM_TrendFollowerScalper.mq5).
 - [x] Biên dịch EA bằng MetaEditor thành công: `0 errors, 0 warnings`.
-- [x] Đồng bộ binary `TM_TrendFollowerScalper.ex5` sang thư mục MT5 Terminal Experts.
+- [ ] ~~Đồng bộ binary `TM_TrendFollowerScalper.ex5`~~ — **CHƯA hợp lệ**: EX5 cũ hơn `RiskGuard.mqh` (BUG-006). Cần biên dịch lại + cập nhật hash + compile log.
 
 ### Bước 4: Forward Test Demo (2 - 4 tuần)
 - [ ] Cài đặt EA lên VPS hoặc máy chạy demo MT5 liên tục 24/5.
@@ -292,7 +327,16 @@ File này là điểm vào duy nhất. Khi nhận yêu cầu cập nhật/tối 
 
 ## 8. CHANGELOG DỰ ÁN
 
+> Changelog đầy đủ ở `docs/CHANGELOG.md`. Bản audit v1.3 ghi tại đó.
+
 ```yaml
+[2026-11-12] - audit-v1.3
+Thay đổi:
+  - Audit P0-P3; rút lại tuyên bố cost-stress "PASSED"; viết lại §4; sửa canonical table trong SOURCE_SPEC.
+  - Tạo TECHNICAL_AUDIT.md, SOURCE_REPORT_CONSISTENCY.md, tests/BUG_REPRODUCTIONS.md, tests/VALIDATION_RESULTS.md,
+    tests/units/TM_EA_UnitTests.mq5, reports/backtests/MANIFEST_INDEX.md + manifest từng run.
+Quyết định: Giữ report cũ; không PASS hạng mục thiếu bằng chứng; mã chiến lược không đổi.
+
 [2026-11-12] - v1.2
 Thay đổi:
   - Khắc phục lỗi nghẽn 0 lệnh do spread vàng 3-digit (chuyển Max_Spread_Points từ 35 lên 350 points = 35 cents trên Exness).
@@ -313,7 +357,7 @@ Quyết định:
 [2026-11-12] - v1.1
 Thay đổi:
   - Sửa lỗi layout cây thư mục và chuẩn hóa bảng canonical inputs trong MASTER.md.
-  - Bổ sung kết quả backtest thực tế 50 USD (run _50_small, 296 lệnh, profit 70.31 USD) vào tài liệu.
+  - Bổ sung kết quả backtest thực tế 50 USD (run _50_small, 296 lệnh, profit 70.31 USD) vào tài liệu. [AUDIT: không report nào hiện có khớp số này — nghi vấn.]
   - Tạo preset chuẩn hóa: TM_TFS_cost_stress_10000.set, TM_TFS_realistic_500.set, TM_TFS_realistic_200.set.
   - Tạo cấu hình tester TM_TFS_CostStress_10000.ini trong MT5 Profiles.
   - Triển khai hoàn chỉnh tính năng Breakout Mode (EvaluateBreakout) trong EntryEngine.mqh theo kênh ATR Breakout và bộ lọc độ dốc EMA.
