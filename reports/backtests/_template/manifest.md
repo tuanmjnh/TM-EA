@@ -1,0 +1,22 @@
+# Backtest manifest template
+
+- EA source version / Git commit / compiled EX5 hash:
+- Exact preset filename and hash:
+- Broker, server, symbol and symbol specifications:
+- Account currency, initial deposit, leverage, hedging/netting mode:
+- Test start/end dates and timezone:
+- Strategy Tester model: Every tick based on real ticks where available
+- Spread mode/value, commission, swap, execution delay/slippage assumptions:
+- Optimization ranges and objective, if applicable:
+- Net profit:
+- Profit factor:
+- Expected payoff:
+- Trade count:
+- Equity/balance drawdown:
+- Recovery factor:
+- Sharpe, if available:
+- Average win/loss:
+- Largest win/loss:
+- Consecutive losses:
+- Known limitations:
+- Decision: reject / investigate / candidate for forward test

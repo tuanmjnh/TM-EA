@@ -1,0 +1,7 @@
+; Preset for small accounts around 50 USD.
+; Higher risk and shorter SL are used so the broker minimum lot does not exceed the risk cap.
+; Diagnostic run: spread and news filters are relaxed.
+RiskPercentPerTrade=10
+Trail_ATR_Mult=1.0
+Max_Spread_Points=10000
+News_Enable=false

@@ -1,0 +1,33 @@
+; TM-EA / TM_TrendFollowerScalper
+; DRAFT ONLY - validate input names and values against the compiled EA before loading.
+; No profitability claim. Initial research baseline, not live-trading advice.
+Enabled=true
+MagicNumber=123456
+Trend_Timeframe=15
+FastEMA_HTF=50
+SlowEMA_HTF=200
+ADX_Period=14
+ADX_Threshold=25.0
+Entry_Timeframe=5
+Entry_Mode=1
+PullbackEMA=20
+Pullback_Buffer_pips=2
+ATR_Channel_Period=14
+BreakoutK=0.7
+Use_TP=false
+Trail_ATR_Mult=2.0
+Trail_ATR_Period=14
+Activate_After_Profit_pips=4.0
+Trail_Step_pips=2.0
+Breakeven_After_pips=8.0
+RiskPercentPerTrade=0.5
+Min_Volume=0.01
+Max_Volume=0.05
+Max_Concurrent_Positions=1
+Max_Daily_Loss_Percent=1.5
+Max_Consecutive_Losses=4
+CoolDown_Minutes=30
+Max_Spread_Points=35
+News_Enable=true
+News_Buffer_Minutes=20
+Use_Session_Filter=true

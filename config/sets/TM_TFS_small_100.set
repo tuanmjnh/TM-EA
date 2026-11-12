@@ -1,0 +1,6 @@
+; Preset for small accounts around 100 USD.
+; Risk is reduced compared with the 50 USD preset, but still above the default to allow minimum-lot entries.
+RiskPercentPerTrade=5
+Trail_ATR_Mult=1.2
+Max_Spread_Points=10000
+News_Enable=false

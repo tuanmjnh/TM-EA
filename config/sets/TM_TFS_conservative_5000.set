@@ -1,0 +1,6 @@
+; Preset for larger/conservative accounts around 5000 USD and above.
+; Lower risk and wider trailing stop.
+RiskPercentPerTrade=0.25
+Trail_ATR_Mult=2.5
+Max_Spread_Points=35
+News_Enable=true

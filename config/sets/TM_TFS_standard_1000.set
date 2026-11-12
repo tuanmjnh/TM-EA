@@ -1,0 +1,6 @@
+; Preset for standard accounts around 1000 USD and above.
+; Uses conservative risk and the default trailing distance.
+RiskPercentPerTrade=0.5
+Trail_ATR_Mult=2.0
+Max_Spread_Points=35
+News_Enable=true
