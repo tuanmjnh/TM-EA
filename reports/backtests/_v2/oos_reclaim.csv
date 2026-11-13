@@ -1,0 +1,20 @@
+key;value
+symbol;XAUUSDm
+expert;TM_TrendFollowerScalper
+end_time;2026.10.30 20:57:59
+deposit;500.00
+final_balance;463.38
+net_profit;-36.62
+gross_profit;85.16
+gross_loss;-121.78
+profit_factor;0.699
+trades;67
+wins;27
+losses;40
+commission;0.00
+swap;0.00
+largest_win;13.65
+largest_loss;-5.30
+max_consec_losses;5
+max_equity_dd_abs;55.28
+max_equity_dd_pct;10.659

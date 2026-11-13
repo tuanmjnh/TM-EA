@@ -20,6 +20,7 @@ private:
    string DailyDateVar() const { return "TM_EA_DailyDate_" + IntegerToString(m_magicNumber) + "_" + m_symbol; }
    string CooldownVar() const { return "TM_EA_CooldownUntil_" + IntegerToString(m_magicNumber) + "_" + m_symbol; }
    string ConsecutiveLossVar() const { return "TM_EA_ConsecutiveLosses_" + IntegerToString(m_magicNumber) + "_" + m_symbol; }
+   string BreakerDayVar() const { return "TM_EA_EquityBreakerDay_" + IntegerToString(m_magicNumber) + "_" + m_symbol; }
 
    datetime BrokerDayStart() const
    {
@@ -122,6 +123,28 @@ public:
       }
    }
 
+   // Equity drawdown from the start-of-day baseline, in percent (floating P/L included).
+   double EquityDrawdownPercent() const
+   {
+      double baseline = GlobalVariableGet(DailyBaselineVar());
+      if(baseline <= 0.0)
+         return 0.0;
+      double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+      return (baseline - equity) / baseline * 100.0;
+   }
+
+   // True once the equity circuit breaker has tripped on the current broker day.
+   bool EquityBreakerTripped() const
+   {
+      return ((datetime)GlobalVariableGet(BreakerDayVar()) == BrokerDayStart());
+   }
+
+   // Latch the breaker for the rest of the broker day so entries stay blocked.
+   void TripEquityBreaker() const
+   {
+      GlobalVariableSet(BreakerDayVar(), (double)BrokerDayStart());
+   }
+
    bool CanOpenNewEntry(const double maxDailyLossPercent,
                         const int maxSpreadPoints,
                         const bool useSessionFilter,
@@ -130,6 +153,12 @@ public:
                         const double volumeForMarginCheck,
                         string &reason) const
    {
+      if(EquityBreakerTripped())
+      {
+         reason = "equity drawdown circuit breaker active (trading halted for the day)";
+         return false;
+      }
+
       double cooldownUntil = GlobalVariableGet(CooldownVar());
       if(cooldownUntil > (double)TimeCurrent())
       {

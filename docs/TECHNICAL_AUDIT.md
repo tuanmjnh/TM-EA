@@ -5,23 +5,26 @@
 **Nguyên tắc:** Chỉ đánh dấu **PASS** khi có bằng chứng thực tế từ source/artifact. Trạng thái dùng: `PASS (static)`, `PASS (build log)`, `FAIL`, `BLOCKED`, `NOT RUN`, `PARTIAL`.
 **Giới hạn môi trường:** Audit này là phân tích tĩnh + đối chiếu artifact. **Không** có MT5/MetaEditor trong môi trường làm việc hiện tại, nên mọi test cần runtime (tester, order thật) được đánh dấu `NOT RUN` / `BLOCKED`.
 
+> 🔄 **Cập nhật v2.0.1 (2026-11-13):** code đã đổi (bỏ Breakout, bật TP, thêm equity breaker, sửa breakeven). **Đã compile `0/0` và chạy backtest real-tick thực tế** — kết quả ÂM trên mọi preset (xem `reports/backtests/_v2/V2_BACKTEST_RESULTS.md`). Hash đã cập nhật.
+
 **Source SHA256 (rút gọn 16 ký tự đầu):**
 
 | File | SHA256[0:16] |
 |---|---|
-| `MQL5/Experts/TM_TrendFollowerScalper.mq5` | `0E86C7E1B8703949` |
+| `MQL5/Experts/TM_TrendFollowerScalper.mq5` | `9696E6951A236500` (v2.5) |
+| `MQL5/Experts/TM_TrendFollowerScalper.ex5` | `F76C419727E08752` (v2.5, compiled 0/0) |
 | `MQL5/Experts/TM_TrendFollowerScalper.ex5` | `B6EC2DAED291B047` |
-| `MQL5/Include/TM_EA/Types.mqh` | `CAD95A6F6373491D` |
-| `MQL5/Include/TM_EA/Inputs.mqh` | `AF15BA90F1F6FDFD` |
+| `MQL5/Include/TM_EA/Types.mqh` | `49A7443740C05E2A` (v2.1) |
+| `MQL5/Include/TM_EA/Inputs.mqh` | `2620B7BAA5C36A49` (v2.5) |
 | `MQL5/Include/TM_EA/SymbolSpecs.mqh` | `6D2BA261EA3CAAB4` |
 | `MQL5/Include/TM_EA/Logger.mqh` | `2744AD6F335F4158` |
-| `MQL5/Include/TM_EA/TrendFilter.mqh` | `3F324A2F764A3F70` |
-| `MQL5/Include/TM_EA/EntryEngine.mqh` | `1A4950251EF257AC` |
+| `MQL5/Include/TM_EA/TrendFilter.mqh` | `FE7390BFBFCADA35` (v2.4, +slope) |
+| `MQL5/Include/TM_EA/EntryEngine.mqh` | `4495A5A2630FAA27` (v2.4, +reclaim) |
 | `MQL5/Include/TM_EA/InitialStop.mqh` | `0C537532C956341E` |
 | `MQL5/Include/TM_EA/RiskManager.mqh` | `CA74C90DAB797D70` |
-| `MQL5/Include/TM_EA/TradeExecutor.mqh` | `50CA0EC1C71D9654` |
-| `MQL5/Include/TM_EA/TrailingEngine.mqh` | `D7C34CE6E6F455A0` |
-| `MQL5/Include/TM_EA/RiskGuard.mqh` | `FCB451D42DD57922` |
+| `MQL5/Include/TM_EA/TradeExecutor.mqh` | `14C2C0D3D93FDC33` (v2.5, +ClosePartial) |
+| `MQL5/Include/TM_EA/TrailingEngine.mqh` | `E046E6415D775206` (v2.2, ATR-gated breakeven) |
+| `MQL5/Include/TM_EA/RiskGuard.mqh` | `EDABC9060B237D0A` (v2.0, +breaker) |
 
 ---
 
@@ -83,7 +86,7 @@ Các buffer trong cùng một hàm được copy với cùng `start=0,count=N`, 
 
 ---
 
-## 5. ATR source mismatch — `ATR_Channel_Period` là input chết
+## 5. ATR source mismatch — `ATR_Channel_Period` là input chết — `[v2.0: ĐÃ XỬ LÝ BẰNG CÁCH BỎ]`
 
 **Phát hiện (FAIL):**
 
@@ -171,11 +174,13 @@ Phần **KHÔNG được persist** (bug):
 | 2 | Shift 0 / shift 1 | PASS (static) |
 | 3 | Đồng bộ timestamp EMA/ADX/ATR/OHLC | PASS (static) |
 | 4 | Indicator handle lifecycle | PASS (static) |
-| 5 | ATR source (`ATR_Channel_Period`) | **FAIL** |
+| 5 | ATR source (`ATR_Channel_Period`) | **RESOLVED v2.0** — input + Breakout đã bỏ |
 | 6 | NewsFilter trong tester / adapter | **FAIL / BLOCKED** |
 | 7 | Filling mode / retcodes / partial | **FAIL** |
 | 8 | RiskGuard restart recovery | **FAIL** (consecutive-loss) |
 | 9 | Session/spread/margin/symbol | PARTIAL |
-| 10 | Cost model (spread+commission trong sizing) | PARTIAL |
+| 10 | Cost model (spread+commission trong sizing) | PARTIAL (BUG-007 mở) |
+| 11 | Take Profit đúng phía (v2.0) | PASS (static) — `TP = entry ± TP_ATR_Mult*ATR` |
+| 12 | Equity circuit breaker (v2.0) | PASS (static) — close-all + flag persist; chưa runtime |
 
 **Không có hạng mục nào ở trạng thái PASS-runtime.** Trạng thái "PASS (static)" nghĩa là logic đúng khi đọc source, chưa chạy kiểm chứng trên MT5.

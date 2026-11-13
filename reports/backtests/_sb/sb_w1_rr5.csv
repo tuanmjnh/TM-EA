@@ -1,0 +1,18 @@
+key;value
+symbol;XAUUSDm
+expert;TM_SessionBreakout
+end_time;2024.10.30 23:59:59
+deposit;5000.00
+final_balance;4776.07
+net_profit;-223.93
+gross_profit;1533.88
+gross_loss;-1805.90
+profit_factor;0.849
+trades;53
+wins;9
+losses;44
+largest_win;230.74
+largest_loss;-55.08
+max_consec_losses;15
+max_equity_dd_abs;638.49
+max_equity_dd_pct;12.537

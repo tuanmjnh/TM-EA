@@ -8,6 +8,12 @@
 > Brief kỹ thuật/triển khai là `ARCHITECTURE.md`. Khi hai tài liệu xung đột, quy tắc an toàn trong
 > `ARCHITECTURE.md` mục 2 được ưu tiên. Tài liệu không phải cam kết lợi nhuận.
 
+> ⚠️ **CẬP NHẬT v2.0 (2026-11-12) — THAY ĐỔI CHIẾN LƯỢC.** Theo quyết định chủ dự án:
+> (1) **Bỏ Breakout**, chỉ còn **Pullback**; (2) **Bật Take Profit** (`Use_TP=true` + `TP_ATR_Mult`)
+> — điều này **ghi đè** yêu cầu "KHÔNG Take Profit" ở §1/§2.2/§4.3 bản gốc;
+> (3) thêm **equity circuit breaker** (`Max_Equity_DD_Percent`). Các mục dưới đây ghi chú
+> `[v2.0]` tại nơi bị ảnh hưởng. Lịch sử thay đổi: `docs/CHANGELOG.md`.
+
 ---
 
 ## 1. TÓM TẮT MỤC TIÊU
@@ -15,8 +21,8 @@ EA chạy tự động trên MT5 với nhiệm vụ:
 - Nhắm tới tài khoản nhỏ (**từ ~50 USD**), nhưng **không cam kết** $50 là đủ cho mọi symbol/broker —
   xem cảnh báo tính khả thi ở mục 4.4.
 - Xác định **xu hướng** bằng bộ lọc khung lớn, chỉ giao dịch theo chiều trend.
-- Tìm **điểm vào lệnh** theo 2 cơ chế (pullback + breakout) ở khung nhỏ.
-- **Không đặt Take Profit** - thay vào đó dùng **Trailing Stop động** để ôm lợi nhuận theo sóng xu hướng.
+- Tìm **điểm vào lệnh** theo 2 cơ chế **pullback + breakout** ở khung nhỏ. `[v2.1: Breakout đã khôi phục, có switch Use_Breakout.]` (`[v2.0]` từng bỏ Breakout.)
+- **Có đặt Take Profit** (`Use_TP=true`) kết hợp **Trailing Stop động** để ôm lợi nhuận theo sóng. `[v2.0]` (Trước v2.0: không TP.)
 - **Vào lệnh liên tục** (chuỗi lệnh "bào" theo từng nhịp sóng) khi điều kiện trend + entry lặp lại.
 - Ưu tiên **giảm rủi ro** tuyệt đối để bảo vệ vốn mỏng: SL luôn bật, có giới hạn thua/ngày, có news filter, chặn spread lớn.
 
@@ -38,7 +44,7 @@ EA chạy tự động trên MT5 với nhiệm vụ:
 
 ### 2.2. Quy tắc bất biến (không được phép vi phạm)
 1. **Luôn có Stop Loss** - không bao giờ mở lệnh không SL.
-2. **KHÔNG có Take Profit** - tắt hẳn; thoát lệnh chỉ qua trailing stop hoặc stop ngược.
+2. ~~**KHÔNG có Take Profit**~~ `[v2.0 — ĐÃ THAY ĐỔI]` **Có Take Profit** (`Use_TP=true`, `TP_ATR_Mult=1.5`); ngoài ra vẫn thoát qua trailing stop hoặc stop ngược.
 3. **CẤM martingale / grid / gấp lệnh** - mỗi lệnh rủi ro cố định % vốn, không tăng lot sau khi thua.
 4. **CẤM vào lệnh khi có tin lớn** - news filter bắt buộc.
 5. **CẤM vào lệnh khi spread vượt ngưỡng** - tránh bị cắn phí.
@@ -84,7 +90,7 @@ Quy tắc:
 > Gợi ý: ADX có thể hiển thị giá trị trung bình của 14/25/50 trong dashboard để người dùng thấy độ mạnh trend.
 
 ### 4.2. ENTRY LOGIC (Tìm điểm vào lệnh)
-Hai cơ chế vào lệnh, cấu hình bật/tắt từng cái.
+`[v2.1]` **Hai** cơ chế vào lệnh: **Pullback** (ưu tiên) và **Breakout** (`Use_Breakout`). Ghi chú: v2.0 đã từng bỏ Breakout, v2.1 khôi phục sau khi backtest cho thấy cần test lại.
 
 #### 4.2.1. Chế độ PULLBACK (ưu tiên, R:R tốt hơn)
 - Khung entry: `Entry_Timeframe` = M1 hoặc M5.
@@ -94,7 +100,7 @@ Hai cơ chế vào lệnh, cấu hình bật/tắt từng cái.
     - Sau đó có **nến đóng xác nhận** quay lên (close > open nến hiện tại, hoặc close > thân nến pullback).
 - Điều kiện vào **SELL** đối xứng (giá hồi lên EMA rồi nến đóng xuống).
 
-#### 4.2.2. Chế độ BREAKOUT (tăng tần suất lệnh)
+#### 4.2.2. Chế độ BREAKOUT — `[v2.1: ĐÃ KHÔI PHỤC]`
 - Dùng **ATR channel**: `ATR_Channel` = ATR(14) trên khung entry.
 - Điểm vào **BUY**: giá **phá trên** đỉnh của nến trước + k*ATR (k = `BreakoutK`, mặc định 0.5-1.0), kèm nến đóng trên mức đó.
 - Điểm vào **SELL**: giá phá dưới đáy + k*ATR.
@@ -106,7 +112,7 @@ Hai cơ chế vào lệnh, cấu hình bật/tắt từng cái.
 
 ---
 
-### 4.3. EXIT LOGIC (Thoát lệnh - Trailing Stop, KHÔNG TP)
+### 4.3. EXIT LOGIC (Thoát lệnh - Trailing Stop + Take Profit `[v2.0]`)
 Mục tiêu: ôm lợi nhuận theo xu hướng, cắt khi giá quay đầu.
 
 Cơ chế:
@@ -116,7 +122,7 @@ Cơ chế:
     - Sau khi giá chạy có lãi ≥ `Activate_After_Profit_pips` (mặc định 3-5 pips), kích hoạt trailing.
     - Vị trí SL mới = `Bid - TrailDistance` (BUY) hoặc `Ask + TrailDistance` (SELL), làm tròn theo tick size, **chỉ dịch về phía có lợi** (không bao giờ lùi SL).
     - Dùng `Trail_Step_pips` để tránh spam lệnh sửa mỗi tick: chỉ sửa khi SL mới chênh nhiều hơn bước này.
-- **KHÔNG có TakeProfit** → tham số TP để rỗng/không gửi.
+- `[v2.0]` **CÓ Take Profit**: `TP = entry + direction * TP_ATR_Mult * ATR` gửi tới broker khi mở lệnh. (Bản gốc: không gửi TP.)
 
 Hành vi khi trend mạnh:
 - ATR nở lớn → trailing rộng → lệnh chịu được cú rung không lao lỗ, sóng lớn bắt trọn.
@@ -195,26 +201,35 @@ số bảo vệ vốn, theo khuyến nghị của `ARCHITECTURE.md` mục 4.5.
 | `SlowEMA_HTF` | int | 200 | 200 | EMA chậm khung trend |
 | `ADX_Period` | int | 14 | 14 | Chu kỳ ADX |
 | `ADX_Threshold` | double | 25.0 | 25.0 | Ngưỡng độ mạnh trend |
+| `Use_EMA_Slope_Filter` | bool | true | true | `[v2.4]` Độ dốc EMA HTF theo chiều trend |
+| `Require_Close_Beyond_EMA` | bool | true | true | `[v2.4]` Nến pullback đóng qua EMA |
 | **Entry** |||||
 | `Entry_Timeframe` | ENUM_TIMEFRAMES | PERIOD_M5 | Period M5 (5) | Khung vào lệnh |
-| `Entry_Mode` | int | 1 | 1 | 1=Pullback, 2=Breakout, 3=Both |
 | `PullbackEMA` | int | 20 | 20 | EMA pullback khung entry |
 | `Pullback_Buffer_pips` | int | 2 | 2 | Dung sai quanh EMA |
-| `ATR_Channel_Period` | int | 14 | 14 | Chu kỳ ATR kênh breakout |
-| `BreakoutK` | double | 0.7 | 0.7 | Hệ số k*ATR |
+| `Use_Breakout` | bool | true | true | `[v2.1]` Bật Breakout (false = chỉ Pullback) |
+| `BreakoutK` | double | 0.7 | 0.7 | `[v2.1]` Hệ số k*ATR |
 | **Exit (Trailing)** |||||
-| `Use_TP` | bool | false | false | **Luôn false - không TP** |
+| `Use_TP` | bool | true | true | `[v2.0]` Bật Take Profit |
+| `TP_ATR_Mult` | double | 1.5 | 1.5 | `[v2.0]` Khoảng TP = mult*ATR |
+| `Trade_Direction` | int | 0 | 0 | `[v2.3]` 0=Both,1=Buy,2=Sell |
+| `SL_ATR_Mult` | double | 1.0 | 1.0 | `[v2.3]` SL ban đầu = mult*ATR |
 | `Trail_ATR_Mult` | double | 2.0 | 2.0 | Khoảng trailing = mult*ATR |
 | `Trail_ATR_Period` | int | 14 | 14 | Chu kỳ ATR cho trailing |
 | `Activate_After_Profit_pips` | double | 4.0 | 4.0 | Kích hoạt trailing sau lãi ≥ này |
 | `Trail_Step_pips` | double | 2.0 | 2.0 | Bước sửa SL tối thiểu |
 | `Breakeven_After_pips` | double | 8.0 | 8.0 | Đưa SL về hòa vốn sau lãi ≥ này |
+| `Breakeven_ATR_Mult` | double | 1.0 | 1.0 | `[v2.2]` Không breakeven trước `mult×ATR` (fix BUG-013) |
+| `Use_Partial_Exit` | bool | false | false | `[v2.5]` Scale-out (mặc định tắt) |
+| `Partial_Exit_ATR_Mult` | double | 1.0 | 1.0 | `[v2.5]` Ngưỡng chốt một phần |
+| `Partial_Exit_Percent` | double | 50.0 | 50.0 | `[v2.5]` % volume chốt |
 | **Risk / MM** |||||
 | `RiskPercentPerTrade` | double | 0.5 | 0.5 | % vốn rủi ro/lệnh |
 | `Min_Volume` | double | 0.01 | 0.01 | Lot tối thiểu |
 | `Max_Volume` | double | 0.05 | 0.05 | Lot tối đa |
 | `Max_Concurrent_Positions` | int | 1 | 1 | Số lệnh mở đồng thời tối đa |
 | **Risk Guard** |||||
+| `Max_Equity_DD_Percent` | double | 10.0 | 10.0 | `[v2.0]` Circuit breaker: DD equity ≥ ngưỡng → đóng hết + khóa trong ngày |
 | `Max_Daily_Loss_Percent` | double | 1.5 | 1.5 | Dừng ngày khi lỗ ≤ ngưỡng này |
 | `Max_Consecutive_Losses` | int | 4 | 4 | Nghỉ sau chuỗi thua |
 | `CoolDown_Minutes` | int | 30 | 30 | Thời gian nghỉ |
@@ -223,10 +238,11 @@ số bảo vệ vốn, theo khuyến nghị của `ARCHITECTURE.md` mục 4.5.
 | `News_Buffer_Minutes` | int | 20 | 20 | Chặn quanh tin |
 | `Use_Session_Filter` | bool | true | true | Chỉ giao dịch khung giờ tốt |
 
-> **Audit 2026-11-12:** cột "Giá trị mặc định" đã sửa cho khớp `Inputs.mqh`
-> (`Max_Concurrent_Positions` 2→1, `Max_Daily_Loss_Percent` 5.0→1.5).
-> Ghi chú sai lệch đã biết: `ATR_Channel_Period` hiện **không được đọc** trong source —
-> breakout dùng ATR(`Trail_ATR_Period`). Xem `TECHNICAL_AUDIT.md` §5 (BUG-001).
+> **Audit 2026-11-12:** cột "Giá trị mặc định" đã sửa cho khớp `Inputs.mqh`.
+>
+> **v2.0:** `Entry_Mode`, `ATR_Channel_Period`, `BreakoutK` đã bị **xóa khỏi code**
+> (cùng với Breakout). `Use_TP`/`TP_ATR_Mult`/`Max_Equity_DD_Percent` đã được thêm.
+> Xem `docs/CHANGELOG.md` (v2.0) và `docs/TECHNICAL_AUDIT.md`.
 
 ---
 

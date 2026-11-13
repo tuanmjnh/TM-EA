@@ -3,6 +3,23 @@
 **Ngày:** 2026-11-12
 Tổng hợp phân loại mọi lần kiểm thử hiện có. Không thay thế report gốc — mỗi run có manifest riêng trong folder tương ứng.
 
+> ⚠️ **v2.0 (2026-11-12):** tất cả run dưới đây được tạo bởi build **trước v2.0** (no-TP, có Breakout). Sau khi đổi sang **Pullback-only + Take Profit + circuit breaker**, **mọi report này vô hiệu cho v2.0** và chỉ còn giá trị lịch sử. Cần chạy lại toàn bộ (cost-stress + OOS) sau khi compile.
+
+## v2.0 runs (2026-11-13) — xem `_v2/`
+
+Đã chạy lại real-tick 3 tháng cho v2.0. Tóm tắt:
+
+| Run | Deposit | Net | PF |
+|---|---|---|---|
+| realistic_200 | 200 | −16.30 | 0.162 |
+| realistic_500 | 500 | −4.16 | 0.414 |
+| standard_1000 | 1 000 | −4.24 | 0.404 |
+| conservative_5000 | 5 000 | −146.21 | 0.266 |
+| small_50 | 50 | −7.96 | 0.121 |
+| cost_stress_10000 | 10 000 | −410.00 | 0.601 |
+
+EX5 `0F50E9E0ADD72C90`; chi tiết & tái lập: `_v2/V2_BACKTEST_RESULTS.md`, `_v2/*.csv`, `tests/run_backtest_v2.ps1`.
+
 | # | Preset / folder | Report | Deposit | Quality | Risk% | Net | PF | Trades | EqDD | Phân loại |
 |---|---|---|---|---|---|---|---|---|---|---|
 | 1 | `TM_TFS_baseline_10000` | `.13.24` | 10 000 | **3% real ticks** | 0.5 | +1 509.49 | 2.45 | 878 | 2.21% | DIAGNOSTIC — quality kém |

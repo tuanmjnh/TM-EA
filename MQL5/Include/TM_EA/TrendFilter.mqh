@@ -27,6 +27,7 @@ private:
    double             m_adxValue;
    datetime           m_lastCompletedBarTime;
    bool               m_ready;
+   bool               m_useSlope;
    string             m_reason;
 
 public:
@@ -47,6 +48,7 @@ public:
       m_adxValue = 0.0;
       m_lastCompletedBarTime = 0;
       m_ready = false;
+      m_useSlope = false;
       m_reason = "not initialized";
    }
 
@@ -55,7 +57,8 @@ public:
              const int fastPeriod,
              const int slowPeriod,
              const int adxPeriod,
-             const double adxThreshold)
+             const double adxThreshold,
+             const bool useSlope = false)
    {
       m_symbol = symbol;
       m_timeframe = timeframe;
@@ -63,6 +66,7 @@ public:
       m_slowPeriod = slowPeriod;
       m_adxPeriod = adxPeriod;
       m_adxThreshold = adxThreshold;
+      m_useSlope = useSlope;
 
       if(fastPeriod <= 0 || slowPeriod <= 0 || adxPeriod <= 0 || adxThreshold <= 0.0)
       {
@@ -140,12 +144,18 @@ public:
       m_adxValue = adxValue;
       m_lastCompletedBarTime = iTime(m_symbol, m_timeframe, 1);
 
-      if(fastEma > slowEma && adxValue > m_adxThreshold && completedClose > fastEma)
+      // fastBuffer[1] = last completed bar, fastBuffer[0] = bar before it.
+      bool slopeUp = (fastBuffer[1] > fastBuffer[0]);
+      bool slopeDown = (fastBuffer[1] < fastBuffer[0]);
+
+      if(fastEma > slowEma && adxValue > m_adxThreshold && completedClose > fastEma &&
+         (!m_useSlope || slopeUp))
       {
          m_state = TREND_STATE_UP;
          m_reason = "uptrend";
       }
-      else if(fastEma < slowEma && adxValue > m_adxThreshold && completedClose < fastEma)
+      else if(fastEma < slowEma && adxValue > m_adxThreshold && completedClose < fastEma &&
+              (!m_useSlope || slopeDown))
       {
          m_state = TREND_STATE_DOWN;
          m_reason = "downtrend";

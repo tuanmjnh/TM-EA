@@ -1,9 +1,9 @@
 //+------------------------------------------------------------------+
 //| TradeExecutor.mqh                                                |
-//| Order execution helper with mandatory initial Stop Loss.          |
+//| Order execution helper with initial Stop Loss and optional TP.    |
 //+------------------------------------------------------------------+
-#ifndef TM_EA_TRADEXECUTOR_MQH
-#define TM_EA_TRADEXECUTOR_MQH
+#ifndef TM_EA_TRADEEXECUTOR_MQH
+#define TM_EA_TRADEEXECUTOR_MQH
 
 #include <Trade\Trade.mqh>
 
@@ -50,13 +50,33 @@ public:
       return count;
    }
 
-   bool OpenBuy(const string symbol, const double volume, const double stopLoss, const string comment, ulong &ticket)
+   // Circuit breaker: market-close every position owned by this EA on the symbol.
+   int CloseAllPositions(const string symbol)
+   {
+      int closed = 0;
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
+      {
+         ulong ticket = PositionGetTicket(i);
+         if(ticket == 0)
+            continue;
+         if(PositionGetString(POSITION_SYMBOL) != symbol)
+            continue;
+         if((int)PositionGetInteger(POSITION_MAGIC) != m_magicNumber)
+            continue;
+         if(m_trade.PositionClose(ticket))
+            closed++;
+      }
+      return closed;
+   }
+
+   bool OpenBuy(const string symbol, const double volume, const double stopLoss, const double takeProfit,
+                const string comment, ulong &ticket)
    {
       ticket = 0;
       if(volume <= 0.0 || stopLoss <= 0.0)
          return false;
 
-      if(!m_trade.Buy(volume, symbol, 0.0, stopLoss, 0.0, comment))
+      if(!m_trade.Buy(volume, symbol, 0.0, stopLoss, takeProfit, comment))
          return false;
 
       if(m_trade.ResultRetcode() != TRADE_RETCODE_DONE)
@@ -66,13 +86,14 @@ public:
       return true;
    }
 
-   bool OpenSell(const string symbol, const double volume, const double stopLoss, const string comment, ulong &ticket)
+   bool OpenSell(const string symbol, const double volume, const double stopLoss, const double takeProfit,
+                 const string comment, ulong &ticket)
    {
       ticket = 0;
       if(volume <= 0.0 || stopLoss <= 0.0)
          return false;
 
-      if(!m_trade.Sell(volume, symbol, 0.0, stopLoss, 0.0, comment))
+      if(!m_trade.Sell(volume, symbol, 0.0, stopLoss, takeProfit, comment))
          return false;
 
       if(m_trade.ResultRetcode() != TRADE_RETCODE_DONE)
@@ -80,6 +101,13 @@ public:
 
       ticket = m_trade.ResultDeal();
       return true;
+   }
+
+   bool ClosePartial(const ulong ticket, const double volume)
+   {
+      if(volume <= 0.0)
+         return false;
+      return m_trade.PositionClosePartial(ticket, volume);
    }
 
    bool ModifyStopLoss(const ulong ticket, const double newStopLoss)
@@ -93,4 +121,4 @@ public:
    double LastPrice() const { return m_trade.ResultPrice(); }
 };
 
-#endif // TM_EA_TRADEXECUTOR_MQH
+#endif // TM_EA_TRADEEXECUTOR_MQH

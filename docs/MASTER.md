@@ -5,8 +5,8 @@
 **Strategy:** TM_TFS_V1  
 **Platform:** MetaTrader 5 / MQL5  
 **Symbol / TF:** XAUUSD (XAUUSDm) / M5  
-**Last updated:** 2026-11-12 (audit v1.3)  
-**Status:** Logic đã triển khai (Phase 1-8 Pullback & Breakout) và biên dịch `0 errors/0 warnings` (có build log). **NHƯNG chưa được xác minh bằng test runtime** và element evidence còn lỗ hổng: binary EX5 cũ hơn source (`RiskGuard.mqh`), report cost-stress không hợp lệ, phần lớn preset vốn thực tế thất bại. Xem `TECHNICAL_AUDIT.md`, `SOURCE_REPORT_CONSISTENCY.md`, `tests/VALIDATION_RESULTS.md`.
+**Last updated:** 2026-11-12 (v2.0 strategy change)  
+**Status:** **v3.1** — chiến lược trend cũ thua 6/6 vòng; **EA `TM_SessionBreakout` (range-breakout H1) + lọc ADX(H1)** là **kết quả ổn định nhất của dự án**: 3Y PF **1.665**, DD **7.9%**; walk-forward **3/3 năm dương** (W1 1.03 / W2 2.69 / W3 1.50); plateau RR4–6. **NHƯNG chưa xác nhận** (commission=0, mẫu nhỏ, fail EURUSD) → **không chạy tiền thật**; bước bắt buộc tiếp theo là test có phí. Đóng: BUG-006/013. Mở: BUG-002/003/004/007/008. Xem `reports/backtests/_sb/SB_RESEARCH.md`, `CHANGELOG.md` (v3.1).
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
 > Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  
@@ -18,8 +18,8 @@
 
 - EA scalp khung nhỏ, trend-following, nhắm tài khoản nhỏ (từ ~50 USD, khuyến nghị 50-200 USD). Không cam kết 50 USD đủ cho mọi symbol/broker.
 - Xác định trend bằng bộ lọc khung lớn (EMA nhanh/chậm + ADX), chỉ vào lệnh theo chiều trend.
-- Vào lệnh theo 2 cơ chế: **pullback** và **breakout** ở khung nhỏ (cả 2 đã triển khai hoàn tất).
-- **Không đặt Take Profit** - dùng **trailing stop động** để ôm lệnh theo sóng.
+- Vào lệnh theo **pullback** ở khung nhỏ (v2.0: Breakout đã bị bỏ).
+- **Có Take Profit** (v2.0, `Use_TP=true`, `TP_ATR_Mult`) kết hợp **trailing stop động**. Trước v2.0 chiến lược không có TP.
 - **SL ban đầu bắt buộc** cho mọi vị thế.
 - Triết lý: không đoán đỉnh/đáy, cắt lỗ nhanh khi sai, để lệnh đúng chạy tới khi chạm trailing. Chấp nhận winrate thấp (35-45%) bù bằng lệnh thắng lớn.
 - Ưu tiên giảm rủi ro tuyệt đối: SL luôn bật, giới hạn thua/ngày, news filter, chặn spread lớn.
@@ -44,15 +44,17 @@ TM-EA/
 │   └── archive/v1/             # Tài liệu cũ, chỉ để tham khảo, read-only
 ├── MQL5/
 │   ├── Experts/
-│   │   ├── TM_TrendFollowerScalper.mq5   # Main EA source
-│   │   └── TM_TrendFollowerScalper.ex5   # Compiled binary
+│   │   ├── TM_TrendFollowerScalper.mq5   # Main EA source (trend-following; 6 vòng tối ưu đều gãy OOS)
+│   │   ├── TM_TrendFollowerScalper.ex5   # Compiled binary
+│   │   ├── TM_SessionBreakout.mq5        # [v3.0] EA nghiên cứu mới: range-breakout theo phiên (H1)
+│   │   └── TM_SessionBreakout.ex5        # Compiled binary
 │   └── Include/TM_EA/
 │       ├── Types.mqh           # Structs & Enums chung
 │       ├── Inputs.mqh          # Định nghĩa toàn bộ inputs của EA
 │       ├── SymbolSpecs.mqh     # Chuẩn hóa pip/point, tick size, lot step
 │       ├── Logger.mqh          # Hệ thống ghi log chuẩn đoán
 │       ├── TrendFilter.mqh     # Bộ lọc xu hướng HTF (EMA + ADX)
-│       ├── EntryEngine.mqh     # Kỹ thuật kích hoạt vào lệnh (Pullback/Breakout)
+│       ├── EntryEngine.mqh     # Kỹ thuật kích hoạt vào lệnh (Pullback; Breakout đã bỏ ở v2.0)
 │       ├── InitialStop.mqh     # Tính toán SL ban đầu theo Swing/ATR
 │       ├── RiskManager.mqh     # Định cỡ volume theo rủi ro tiền mặt
 │       ├── TradeExecutor.mqh   # Đặt lệnh thị trường, kiểm tra SL, chặn TP
@@ -84,28 +86,37 @@ TM-EA/
 | **Chung** | `Enabled` | `true` | Bật/tắt toàn bộ EA |
 | | `MagicNumber` | `123456` | Magic number định danh lệnh |
 | | `TradeComment` | `"TM_TFS_V1"` | Ghi chú lệnh |
+| | `Trade_Direction` | `0` | `[v2.3]` 0=Both, 1=Buy only, 2=Sell only |
 | **Xu hướng (HTF)** | `Trend_Timeframe` | `PERIOD_M15` | Khung thời gian xác định trend |
 | | `FastEMA_HTF` | `50` | Chu kỳ EMA nhanh khung lớn |
 | | `SlowEMA_HTF` | `200` | Chu kỳ EMA chậm khung lớn |
 | | `ADX_Period` | `14` | Chu kỳ ADX xác định độ mạnh trend |
 | | `ADX_Threshold` | `25.0` | Ngưỡng ADX tối thiểu để công nhận trend |
+| | `Use_EMA_Slope_Filter` | `true` | `[v2.4]` Yêu cầu độ dốc EMA HTF theo chiều trend |
+| | `Require_Close_Beyond_EMA` | `true` | `[v2.4]` Nến pullback phải đóng qua EMA |
 | **Vào lệnh (Entry)** | `Entry_Timeframe` | `PERIOD_M5` | Khung thời gian scalp vào lệnh |
-| | `Entry_Mode` | `1` | `1`: Pullback, `2`: Breakout, `3`: Both |
 | | `PullbackEMA` | `20` | Đường EMA pullback trên khung vào lệnh |
 | | `Pullback_Buffer_pips` | `2` | Biên độ đệm quanh EMA (pips) |
-| | `ATR_Channel_Period` | `14` | Chu kỳ ATR phục vụ breakout |
-| | `BreakoutK` | `0.7` | Hệ số $k \times \text{ATR}$ kênh breakout |
-| **Thoát lệnh / Trailing** | `Use_TP` | `false` | **BẮT BUỘC FALSE** (Không đặt Take Profit) |
+| | `Use_Breakout` | `true` | `[v2.1]` Bật Breakout (nếu false: chỉ Pullback) |
+| | `BreakoutK` | `0.7` | `[v2.1]` Hệ số k*ATR cho kênh breakout |
+| **Thoát lệnh / Trailing** | `Use_TP` | `true` | Bật Take Profit (v2.0) |
+| | `TP_ATR_Mult` | `1.5` | Khoảng TP = $\text{mult} \times \text{ATR}$ từ entry |
+| | `SL_ATR_Mult` | `1.0` | `[v2.3]` Khoảng SL ban đầu = mult×ATR (tách khỏi trailing) |
 | | `Trail_ATR_Mult` | `2.0` | Hệ số khoảng cách trailing: $\text{mult} \times \text{ATR}$ |
 | | `Trail_ATR_Period` | `14` | Chu kỳ ATR tính khoảng cách trailing |
 | | `Activate_After_Profit_pips`| `4.0` | Lãi tối thiểu để kích hoạt dời SL trailing |
 | | `Trail_Step_pips` | `2.0` | Bước dịch chuyển SL tối thiểu (pips) |
 | | `Breakeven_After_pips` | `8.0` | Dời SL về điểm hòa vốn khi đạt mức lãi này |
+| | `Breakeven_ATR_Mult` | `1.0` | `[v2.2]` Không breakeven trước `mult × ATR` (fix BUG-013) |
+| | `Use_Partial_Exit` | `false` | `[v2.5]` Scale-out (mặc định tắt — làm giảm PF) |
+| | `Partial_Exit_ATR_Mult` | `1.0` | `[v2.5]` Ngưỡng chốt một phần = mult×ATR |
+| | `Partial_Exit_Percent` | `50.0` | `[v2.5]` % volume chốt |
 | **Quản lý vốn (Risk)** | `RiskPercentPerTrade` | `0.5` | % vốn rủi ro trên mỗi lệnh |
 | | `Min_Volume` | `0.01` | Volume tối thiểu |
 | | `Max_Volume` | `0.05` | Volume tối đa |
 | | `Max_Concurrent_Positions` | `1` | Số vị thế mở đồng thời tối đa |
-| **Bảo vệ an toàn (Guards)**| `Max_Daily_Loss_Percent` | `1.5` | Giới hạn lỗ trong ngày (% vốn) |
+| **Bảo vệ an toàn (Guards)**| `Max_Equity_DD_Percent` | `10.0` | Circuit breaker: DD equity từ baseline ngày ≥ ngưỡng → đóng hết + khóa trong ngày |
+| | `Max_Daily_Loss_Percent` | `1.5` | Giới hạn lỗ trong ngày (% vốn) |
 | | `Max_Consecutive_Losses` | `4` | Số lệnh thua liên tiếp trước khi ngưng |
 | | `CoolDown_Minutes` | `30` | Thời gian tạm nghỉ sau chuỗi thua (phút) |
 | | `Max_Spread_Points` | `35` | Spread tối đa cho phép vào lệnh (points) |
@@ -117,22 +128,41 @@ TM-EA/
 
 ## 3. BẤT BIẾN CHIẾN LƯỢC (INVARIANTS - KHÔNG ĐƯỢC PHÁ)
 
-1. **Không Take Profit.** `Use_TP` luôn `false`. Verify không có giá TP nào gửi tới broker.
+1. ~~**Không Take Profit.** `Use_TP` luôn `false`.~~ **[v2.0 — ĐÃ THAY ĐỔI]** Take Profit được bật mặc định (`Use_TP=true`, `TP_ATR_Mult`). Đây là quyết định của chủ dự án ngày 2026-11-12; tài liệu và spec đã cập nhật. Khi `Use_TP=true`, phải xác minh TP luôn nằm đúng phía (trên entry cho BUY, dưới entry cho SELL).
 2. **SL ban đầu bắt buộc** cho mọi vị thế. Nếu broker từ chối SL hoặc vị thế không có SL - chạy quy trình bảo vệ khẩn cấp và **chặn vào lệnh mới**.
 3. **Không martingale, không grid, không loss-recovery sizing, không averaging down.**
 4. **Không ép lot tối thiểu của broker** nếu nó vượt risk budget. Bỏ lệnh thay vì ép.
 5. **Trailing stop chỉ được di chuyển theo hướng bảo vệ** (không nới rộng SL ra).
 6. **File `.set` là snapshot cấu hình, KHÔNG phải bằng chứng chiến lược có lãi.**
+7. **[v2.0] Circuit breaker bắt buộc bật.** Khi DD equity từ baseline ngày ≥ `Max_Equity_DD_Percent`, EA phải đóng toàn bộ vị thế và khóa mở lệnh mới tới hết ngày (persist qua restart).
 
 ---
 
 ## 4. KẾT QUẢ BACKTEST HIỆN TẠI (đã audit — v1.3)
 
-> ⚠️ **Viết lại ngày 2026-11-12.** Bản trước tuyên bố cost-stress "PASSED XUẤT SẮC" — tuyên bố đó **đã bị rút lại** vì report cost-stress trùng khít report baseline (BUG-005) và không có commission/slippage. Chi tiết: `SOURCE_REPORT_CONSISTENCY.md` §5, `reports/backtests/MANIFEST_INDEX.md`. **Không con số nào dưới đây là bằng chứng chiến lược đã được xác nhận.**
+> ⚠️ **Toàn bộ §4 thuộc build TRƯỚC v2.0 (no-TP + Breakout) → VÔ HIỆU cho v2.0.** Sau khi sửa code v2.0, phải chạy lại từ đầu. Bản trước tuyên bố cost-stress "PASSED XUẤT SẮC" — tuyên bố đó **đã bị rút lại** vì report cost-stress trùng khít report baseline (BUG-005). Chi tiết: `SOURCE_REPORT_CONSISTENCY.md` §5, `reports/backtests/MANIFEST_INDEX.md`. **Không con số nào dưới đây là bằng chứng chiến lược đã được xác nhận.**
 
 Điều kiện chung của **mọi** run: 3 tháng (`2026.08.01–2026.10.31`), 1 symbol (XAUUSDm), commission = 0, `News_Enable=true` **vô hiệu trong tester** (BUG-004), không OOS/walk-forward, binary EX5 cũ hơn source (BUG-006).
 
-### 4.1 Bảng tổng hợp thực tế
+### 4.0 [v2.0 — KẾT QUẢ THỰC THI 2026-11-13] — TẤT CẢ ĐỀU LỖ
+
+Backtest real-tick (Model=4), XAUUSDm M5, 2026.08.01–2026.10.31, commission 0, EX5 `0F50E9E0ADD72C90`, biên dịch `0 errors/0 warnings`.
+
+| Preset | Deposit | Net | PF | Trades | EqDD |
+|---|---|---|---|---|---|
+| realistic_200 | 200 | −16.30 | 0.162 | 59 | 8.64% |
+| realistic_500 | 500 | −4.16 | 0.414 | 47 | 1.94% |
+| standard_1000 | 1 000 | −4.24 | 0.404 | 48 | 0.99% |
+| conservative_5000 | 5 000 | −146.21 | 0.266 | 511 | 3.02% |
+| small_50 | 50 | −7.96 | 0.121 | 26 | **18.40%** |
+| cost_stress_10000 | 10 000 | −410.00 | 0.601 | 741 | 6.33% |
+
+Kiểm soát TP (Model=1, Oct 1–15): không-TP PF **3.39** > TP1.5 **2.47** > TP0.2 **2.14** → TP làm giảm kết quả.
+**Quyết định: REJECT v2.0 as-is.** Chi tiết & tái lập: `reports/backtests/_v2/V2_BACKTEST_RESULTS.md`, `tests/run_backtest_v2.ps1`.
+
+**v2.1 — Study tối ưu (IS 2026.05–07 / OOS 2026.08–10):** fix **BUG-013 (breakeven)** nâng PF 0.155→0.897 (cải thiện thật); khôi phục Breakout +PF nhỏ; tối ưu ADX dương trên IS (PF 1.08 @ADX20) **gãy trên OOS (PF 0.57)** → overfit, không áp dụng. **Chiến lược vẫn PF < 1.** Chi tiết: `reports/backtests/_v2/OPTIMIZATION_STUDY.md`.
+
+### 4.1 Bảng tổng hợp thực tế (pre-v2.0 — lịch sử)
 
 | Preset | Deposit | Quality | Risk% | Net | PF | Trades | EqDD | Phân loại |
 |---|---|---|---|---|---|---|---|---|
@@ -194,7 +224,7 @@ flowchart TD
     S2 -- "Không" --> S1_Fix["Khắc phục/Cân chỉnh lại<br>Trailing & Filter"]
     S1_Fix --> S1
     S2 -- "Có" --> S3["Bước 2: Cân chỉnh vốn thực tế<br>(Vốn 200-500 USD, Risk 0.5-1%)"]
-    S3 --> S4["Bước 3: Hoàn thiện tính năng<br>(Breakout Mode trong EntryEngine)"]
+    S3 --> S4["Bước 3 (v2.0): Pullback-only + TP +<br>equity circuit breaker đã sửa code"]
     S4 --> S5["Bước 4: Forward Test Demo<br>(Chạy 2-4 tuần VPS/demo)"]
     S5 --> S6["Bước 5: Thẩm định Go-Live<br>(Checklist an toàn trước khi vào vốn thật)"]
 ```
@@ -221,10 +251,13 @@ flowchart TD
 - [x] Tạo preset `TM_TFS_realistic_200.set` (Vốn 200 USD, risk **2.0%**, ATR mult 1.5x, spread **350**, news ON). **Đã test → PF 0.58 (FAIL).**
 - [x] Copy toàn bộ preset vào thư mục Tester Profiles của MT5 Terminal.
 
-### Bước 3: Hoàn thiện Logic còn thiếu
-- [x] Hoàn thiện nhánh **Breakout Mode** (`Entry_Mode = 2` và `3`) trong [`MQL5/Include/TM_EA/EntryEngine.mqh`](file:///d:/Applications/TM-EA/MQL5/Include/TM_EA/EntryEngine.mqh) theo đúng mô tả của `SOURCE_SPEC_V1.md` (kênh ATR Breakout + bộ lọc độ dốc EMA).
-- [x] Tích hợp điều phối Pullback & Breakout trong [`MQL5/Experts/TM_TrendFollowerScalper.mq5`](file:///d:/Applications/TM-EA/MQL5/Experts/TM_TrendFollowerScalper.mq5).
-- [x] Biên dịch EA bằng MetaEditor thành công: `0 errors, 0 warnings`.
+### Bước 3: Hoàn thiện Logic — v2.0 (STRATEGY CHANGE)
+- [x] **Bỏ Breakout**: xóa `EvaluateBreakout`, `Entry_Mode`, `BreakoutK`, `ATR_Channel_Period`, enum `ENUM_ENTRY_MODE`, `SETUP_BREAKOUT`. Entry chỉ còn Pullback.
+- [x] **Bật Take Profit**: `Use_TP=true`, thêm `TP_ATR_Mult=1.5`; truyền TP khi mở lệnh; bỏ chặn `INIT_FAILED`.
+- [x] **Thêm circuit breaker**: `Max_Equity_DD_Percent=10.0` + `CloseAllPositions`.
+- [x] **Sửa breakeven 2 nhánh** (BUG-010).
+- [x] Đồng bộ 8 preset `config/sets/`.
+- [ ] (cũ) Biên dịch EA bằng MetaEditor `0 errors, 0 warnings` — **CHƯA chạy lại sau v2.0** (xem Bước 0).
 - [ ] ~~Đồng bộ binary `TM_TrendFollowerScalper.ex5`~~ — **CHƯA hợp lệ**: EX5 cũ hơn `RiskGuard.mqh` (BUG-006). Cần biên dịch lại + cập nhật hash + compile log.
 
 ### Bước 4: Forward Test Demo (2 - 4 tuần)
@@ -252,7 +285,7 @@ flowchart TD
 
 ### 6.2 Hành động BỊ CẤM
 
-- Bật `Use_TP` hoặc gửi giá TP tới broker.
+- ~~Bật `Use_TP` hoặc gửi giá TP tới broker.~~ [v2.0: TP được phép và bật mặc định — không còn bị cấm.]
 - Thêm martingale / grid / loss-recovery / averaging down.
 - Force min lot khi vượt risk budget.
 - Nới trailing theo hướng tăng rủi ro.
@@ -273,7 +306,8 @@ flowchart TD
 
 ### 6.4 Checklist validation (trước khi merge/đưa vào dùng)
 
-- [ ] `Use_TP=false`, không có TP gửi broker.
+- [ ] Nếu `Use_TP=true`: TP luôn đúng phía entry; nếu `false`: không có TP gửi broker.
+- [ ] Circuit breaker `Max_Equity_DD_Percent`: DD vượt ngưỡng → đóng hết + khóa trong ngày (verify restart).
 - [ ] Mọi vị thế có SL ban đầu hợp lệ.
 - [ ] Không có logic martingale/grid/recovery trong diff.
 - [ ] Lot không bị ép vượt risk cap.
@@ -330,6 +364,16 @@ File này là điểm vào duy nhất. Khi nhận yêu cầu cập nhật/tối 
 > Changelog đầy đủ ở `docs/CHANGELOG.md`. Bản audit v1.3 ghi tại đó.
 
 ```yaml
+[2026-11-12] - v2.0 (STRATEGY CHANGE)
+Thay đổi:
+  - Bỏ Breakout (Pullback-only); bật Take Profit (Use_TP=true, TP_ATR_Mult=1.5);
+    thêm equity circuit breaker (Max_Equity_DD_Percent=10.0 + force-close);
+    sửa breakeven 2 nhánh (BUG-010); đồng bộ 8 preset.
+Lý do: yêu cầu chủ dự án — đơn giản hóa entry, chốt lời bằng TP, chặn DD sâu.
+File ảnh hưởng: Inputs/EntryEngine/Types/TradeExecutor/TrailingEngine/RiskGuard.mqh,
+  TM_TrendFollowerScalper.mq5, config/sets/*, docs/*, README.md, tests/*.
+Quyết định: Giữ; nhưng CHƯA compile lại, CHƯA chạy lại backtest → mọi report cũ vô hiệu cho v2.0.
+
 [2026-11-12] - audit-v1.3
 Thay đổi:
   - Audit P0-P3; rút lại tuyên bố cost-stress "PASSED"; viết lại §4; sửa canonical table trong SOURCE_SPEC.

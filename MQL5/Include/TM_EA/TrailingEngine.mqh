@@ -1,6 +1,6 @@
 //+------------------------------------------------------------------+
 //| TrailingEngine.mqh                                               |
-//| ATR trailing stop management. No Take Profit.                    |
+//| ATR trailing stop management with break-even. No forced TP here.  |
 //+------------------------------------------------------------------+
 #ifndef TM_EA_TRAILINGENGINE_MQH
 #define TM_EA_TRAILINGENGINE_MQH
@@ -36,6 +36,7 @@ public:
               const double activateAfterProfitPips,
               const double trailStepPips,
               const double breakevenAfterPips,
+              const double breakevenAtrMult,
               const double tickSize,
               const int stopLevelPoints,
               const int freezeLevelPoints)
@@ -46,7 +47,10 @@ public:
       double trailDistance = atrValue * atrMultiplier;
       double activateDistance = m_point * activateAfterProfitPips * 10.0;
       double stepDistance = m_point * trailStepPips * 10.0;
-      double breakevenDistance = m_point * breakevenAfterPips * 10.0;
+      // BUG-013 fix: breakeven must not trigger below market noise. Gate it by
+      // ATR so a fixed pipe value smaller than the gold spread cannot slit winners.
+      double breakevenDistance = MathMax(m_point * breakevenAfterPips * 10.0,
+                                         atrValue * breakevenAtrMult);
 
       double bid = SymbolInfoDouble(m_symbol, SYMBOL_BID);
       double ask = SymbolInfoDouble(m_symbol, SYMBOL_ASK);
@@ -78,7 +82,11 @@ public:
 
             if(profitDistance >= breakevenDistance)
             {
+               // Cover spread when possible, but never place the stop on the
+               // wrong side of the market (which the broker rejects).
                double breakEvenSL = openPrice + spread;
+               if(breakEvenSL >= bid)
+                  breakEvenSL = openPrice;
                if(breakEvenSL > newSL)
                   newSL = breakEvenSL;
             }
@@ -110,7 +118,11 @@ public:
 
             if(profitDistance >= breakevenDistance)
             {
+               // Cover spread when possible, but never place the stop on the
+               // wrong side of the market (which the broker rejects).
                double breakEvenSL = openPrice - spread;
+               if(breakEvenSL <= ask)
+                  breakEvenSL = openPrice;
                if(breakEvenSL < newSL)
                   newSL = breakEvenSL;
             }

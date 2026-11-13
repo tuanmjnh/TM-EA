@@ -1,6 +1,7 @@
 //+------------------------------------------------------------------+
 //| EntryEngine.mqh                                                  |
-//| Pullback and Breakout entry detection on completed bars.         |
+//| Pullback entry detection on completed bars.                      |
+//| Breakout mode was removed (strategy change 2026-11-12).          |
 //+------------------------------------------------------------------+
 #ifndef TM_EA_ENTRYENGINE_MQH
 #define TM_EA_ENTRYENGINE_MQH
@@ -14,6 +15,7 @@ private:
    ENUM_TIMEFRAMES    m_entryTimeframe;
    int                m_pullbackEmaPeriod;
    int                m_pullbackBufferPips;
+   bool               m_requireCloseBeyondEma;
    int                m_hPullbackEma;
    double             m_point;
    datetime           m_lastSignalBarTime;
@@ -25,6 +27,7 @@ public:
       m_entryTimeframe = PERIOD_CURRENT;
       m_pullbackEmaPeriod = 0;
       m_pullbackBufferPips = 0;
+      m_requireCloseBeyondEma = false;
       m_hPullbackEma = INVALID_HANDLE;
       m_point = 0.0;
       m_lastSignalBarTime = 0;
@@ -34,13 +37,15 @@ public:
              const ENUM_TIMEFRAMES entryTimeframe,
              const int pullbackEmaPeriod,
              const int pullbackBufferPips,
-             const double point)
+             const double point,
+             const bool requireCloseBeyondEma = false)
    {
       m_symbol = symbol;
       m_entryTimeframe = entryTimeframe;
       m_pullbackEmaPeriod = pullbackEmaPeriod;
       m_pullbackBufferPips = pullbackBufferPips;
       m_point = point;
+      m_requireCloseBeyondEma = requireCloseBeyondEma;
 
       if(pullbackEmaPeriod <= 0 || point <= 0.0)
          return false;
@@ -112,7 +117,8 @@ public:
       if(trendState == TREND_STATE_UP)
       {
          bool touchedPullbackZone = (completedLow <= emaValue + bufferPrice);
-         bool bullishConfirmation = (completedClose > completedOpen);
+         bool bullishConfirmation = (completedClose > completedOpen) &&
+                                    (!m_requireCloseBeyondEma || completedClose > emaValue);
 
          if(touchedPullbackZone && bullishConfirmation)
          {
@@ -133,7 +139,8 @@ public:
       else if(trendState == TREND_STATE_DOWN)
       {
          bool touchedPullbackZone = (completedHigh >= emaValue - bufferPrice);
-         bool bearishConfirmation = (completedClose < completedOpen);
+         bool bearishConfirmation = (completedClose < completedOpen) &&
+                                    (!m_requireCloseBeyondEma || completedClose < emaValue);
 
          if(touchedPullbackZone && bearishConfirmation)
          {
@@ -173,13 +180,11 @@ public:
          signal.reason = "trend state is none";
          return signal;
       }
-
       if(atrValue <= 0.0)
       {
          signal.reason = "invalid ATR value for breakout";
          return signal;
       }
-
       if(BarsCalculated(m_hPullbackEma) < m_pullbackEmaPeriod + 3)
       {
          signal.reason = "EMA is still calculating";
@@ -193,16 +198,14 @@ public:
          return signal;
       }
 
-      // Buffer[2] is bar 0 (current), Buffer[1] is bar 1 (completed), Buffer[0] is bar 2.
-      double emaPrev = emaBuffer[0];      // Bar 2 EMA
-      double emaCompleted = emaBuffer[1]; // Bar 1 EMA
+      double emaPrev = emaBuffer[0];
+      double emaCompleted = emaBuffer[1];
 
       double completedOpen  = iOpen(m_symbol, m_entryTimeframe, 1);
       double completedHigh  = iHigh(m_symbol, m_entryTimeframe, 1);
       double completedLow   = iLow(m_symbol, m_entryTimeframe, 1);
       double completedClose = iClose(m_symbol, m_entryTimeframe, 1);
       datetime completedBarTime = iTime(m_symbol, m_entryTimeframe, 1);
-
       double prevHigh = iHigh(m_symbol, m_entryTimeframe, 2);
       double prevLow  = iLow(m_symbol, m_entryTimeframe, 2);
 
@@ -232,9 +235,7 @@ public:
             m_lastSignalBarTime = completedBarTime;
          }
          else
-         {
             signal.reason = "breakout buy conditions not met";
-         }
       }
       else if(trendState == TREND_STATE_DOWN)
       {
@@ -254,9 +255,7 @@ public:
             m_lastSignalBarTime = completedBarTime;
          }
          else
-         {
             signal.reason = "breakout sell conditions not met";
-         }
       }
 
       return signal;

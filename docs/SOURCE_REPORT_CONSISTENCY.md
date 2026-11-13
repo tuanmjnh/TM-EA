@@ -3,14 +3,16 @@
 **Ngày:** 2026-11-12
 **Mục tiêu:** đối chiếu `docs/MASTER.md` với source MQL5, preset và report thực tế; ghi lại mọi tuyên bố không có bằng chứng.
 
+> 🔄 **v2.0 (2026-11-12):** Breakout đã bị **bỏ khỏi code** và Take Profit đã **bật**. Do đó các kết luận "breakout đang chạy" ở §1 là đúng **tại thời điểm audit v1.3** nhưng không còn cho v2.0. Mọi report trong §5 thuộc build **no-TP + Breakout** → **vô hiệu cho v2.0**.
+
 ---
 
 ## 1. Trạng thái tổng quan (thực tế)
 
 | # | Tuyên bố trong MASTER.md | Bằng chứng thực tế | Kết luận |
 |---|---|---|---|
-| P0.2 | Breakout tồn tại trong `EntryEngine` và được gọi từ Main EA | `EntryEngine::EvaluateBreakout` (dòng 158-263); gọi tại `TM_TrendFollowerScalper.mq5` dòng 227 | **PASS** |
-| P0.3 | Entry_Mode 1/2/3 | Main EA dòng 219-228: mode 1 & 3 → Pullback; mode 2 & 3 → Breakout | **PASS** |
+| P0.2 | Breakout tồn tại trong `EntryEngine` và được gọi từ Main EA | Tại audit v1.3: `EvaluateBreakout` dòng 158-263, gọi tại mq5:227 → **PASS (khi đó)**. `[v2.0]` đã xóa hoàn toàn. | PASS→REMOVED v2.0 |
+| P0.3 | Entry_Mode 1/2/3 | Tại audit v1.3: mq5:219-228. `[v2.0]` đã xóa `Entry_Mode`. | PASS→REMOVED v2.0 |
 | — | "compile 0 errors / 0 warnings" (Phase 1-8) | `tests/compile-*.log`: phase1..phase8, 7e, breakout, check đều `0 errors, 0 warnings` | **PASS (build log)** |
 | — | EX5 hiện tại khớp source hiện tại | `RiskGuard.mqh` sửa lúc 11:34:24; compile log cuối `compile-check.log` lúc 11:31:14; EX5 lúc 11:31:14 | **FAIL** (binary cũ hơn source) |
 
@@ -43,7 +45,7 @@ Spec nói cột "Giá trị mặc định" là default của code, nhưng 2 ô *
 
 ### 3.3 `ATR_Channel_Period`
 
-Khai báo trong input + spec, nhưng **dead**: không được đọc trong source. Breakout dùng `Trail_ATR_Period`. Xem `TECHNICAL_AUDIT.md` §5.
+Tại audit v1.3: dead (breakout dùng `Trail_ATR_Period`). `[v2.0]` `ATR_Channel_Period` cùng Breakout đã bị **xóa khỏi `Inputs.mqh`**.
 
 ---
 
@@ -125,8 +127,8 @@ MASTER chỉ highlight baseline 10 000 (PF 2.45) và conservative (PF 1.73), **k
 
 | Mục | Trạng thái |
 |---|---|
-| Breakout tồn tại + được gọi | PASS |
-| Entry_Mode 1/2/3 | PASS |
+| Breakout tồn tại + được gọi | PASS (v1.3) → **REMOVED v2.0** |
+| Entry_Mode 1/2/3 | PASS (v1.3) → **REMOVED v2.0** |
 | Compile 0/0 (Phase 1-8) | PASS (build log) |
 | EX5 khớp source | **FAIL** (binary cũ hơn `RiskGuard.mqh`) |
 | MASTER §2.1 cây nguồn | PASS |

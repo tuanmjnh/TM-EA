@@ -5,7 +5,7 @@
 **Initial strategy:** `TM_TFS_V1`  
 **Platform:** MetaTrader 5 / MQL5
 
-Trend-following micro-scalper for small accounts, using pullback and breakout entries, mandatory initial Stop Loss, adaptive trailing exits, and no Take Profit.
+Trend-following micro-scalper for small accounts: pullback entries (**v2.0: Breakout removed**), mandatory initial Stop Loss, adaptive trailing exits with **Take Profit (v2.0)**, and an equity-drawdown circuit breaker.
 
 ## Project layout
 
@@ -39,7 +39,8 @@ TM-EA/
 
 ## Important operating rules
 
-- No Take Profit orders. `Use_TP` must remain false; verify that no TP price is sent to the broker.
+- **v2.0:** Take Profit is now enabled by default (`Use_TP=true`, `TP_ATR_Mult`). When enabled, verify TP is always on the correct side of entry. (Pre-v2.0 builds had no TP.)
+- Equity circuit breaker: when equity drawdown from the day baseline reaches `Max_Equity_DD_Percent`, close all positions and halt new entries for the day.
 - Every opened position must have a valid initial Stop Loss attached. If the broker rejects the SL or the position is found without one, apply the documented emergency-protection procedure and block new entries.
 - No martingale, grid, loss recovery sizing, or averaging down.
 - Never force the broker's minimum lot if it exceeds the configured risk budget. Skip the trade instead.
@@ -54,13 +55,10 @@ TM-EA/
 
 ## Current status
 
-Logic implemented (Pullback & Breakout in `MQL5/Include/TM_EA/`) and compiling with `0 errors / 0 warnings` (build logs in `tests/compile-*.log`). **Not yet verified in a running terminal.**
+**v2.0 (2026-11-12) — deliberate strategy change:** entry is now **Pullback-only** (Breakout removed), **Take Profit is enabled** (`Use_TP=true`), and an **equity circuit breaker** (`Max_Equity_DD_Percent`) force-closes and halts on deep drawdown. Source updated; **NOT yet recompiled and NOT re-backtested.**
 
-Audit findings that block "done" (see `docs/TECHNICAL_AUDIT.md`, `docs/SOURCE_REPORT_CONSISTENCY.md`):
+- ❌ The committed `TM_TrendFollowerScalper.ex5` predates the v2.0 source — must be rebuilt (BUG-006).
+- ⚠️ **Every existing report is invalid for v2.0** (they were produced by the no-TP, Breakout-enabled build). Kept only as history.
+- Open bugs: hard-coded FOK filling (BUG-002), consecutive-loss double-count on restart (BUG-003), news filter inactive in tester (BUG-004), sizing ignores commission (BUG-007), margin uses min volume (BUG-008) — see `tests/BUG_REPRODUCTIONS.md`.
 
-- The committed `TM_TrendFollowerScalper.ex5` is **older than** `RiskGuard.mqh` — rebuild required (BUG-006).
-- No valid cost-stress run exists; the `cost_stress_10000` report duplicates `baseline_10000` (BUG-005).
-- Most realistic-capital presets (200–1000 USD) backtest **negative**; `small_50` DD exceeds the 20% gate.
-- Open bugs: news filter inactive in tester, hard-coded FOK filling, consecutive-loss double-count on restart, dead `ATR_Channel_Period` — see `tests/BUG_REPRODUCTIONS.md`.
-
-Open validation tasks and honest PASS/FAIL/BLOCKED/NOT RUN statuses are in `tests/VALIDATION_RESULTS.md` and `reports/backtests/MANIFEST_INDEX.md`. **No backtest result here is proof of a profitable strategy.**
+Required next: compile → valid cost-stress (commission+slippage+news) → OOS, then Cent-account demo. Statuses in `tests/VALIDATION_RESULTS.md`; history in `reports/backtests/MANIFEST_INDEX.md`. **No backtest result here is proof of a profitable strategy.**

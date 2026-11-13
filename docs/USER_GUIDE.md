@@ -28,10 +28,8 @@ Tài liệu này dành cho người mới bắt đầu, hướng dẫn chi tiế
 `TM_TrendFollowerScalper` là robot giao dịch thuật toán theo trường phái **Micro-Scalping bám theo xu hướng**:
 - **Nguyên lý cốt lõi:**
   1. **Lọc xu hướng lớn (M15)**: Chỉ mua khi có Uptrend rõ ràng (Fast EMA > Slow EMA và ADX > 25), chỉ bán khi có Downtrend. Nếu thị trường đi ngang (Sideway) thì EA **đứng ngoài 100%**.
-  2. **Tìm điểm vào lệnh nhỏ (M5)**: Vào lệnh theo 2 cơ chế:
-     - **Pullback**: Giá hồi về đường EMA 20 rồi nến đóng xác nhận quay lại xu hướng.
-     - **Breakout**: Giá phá vỡ biên kênh ATR của nến trước kèm nến đóng xác nhận và EMA dốc theo chiều trend.
-  3. **Không đặt Take Profit (No TP)**: Thay vì chốt lời cố định, EA dùng **Trailing Stop động theo ATR**. Khi thị trường tạo sóng lớn, SL sẽ tự động dời bám sát giá để tối đa hóa lợi nhuận. Khi giá đảo chiều, SL sẽ đóng lệnh bảo toàn lãi.
+  2. **Tìm điểm vào lệnh nhỏ (M5)** `[v2.0]`: Vào lệnh theo **Pullback** — giá hồi về đường EMA 20 rồi nến đóng xác nhận quay lại xu hướng. (v2.0 đã bỏ cơ chế **Breakout**.)
+  3. **Có Take Profit + Trailing Stop** `[v2.0]`: EA đặt **TP cố định theo ATR** (`TP_ATR_Mult`) **kết hợp** Trailing Stop động theo ATR. (Trước v2.0 không đặt TP.) Ngoài ra có **circuit breaker**: nếu DD equity chạm `Max_Equity_DD_Percent` (mặc định 10%), EA đóng toàn bộ lệnh và khóa giao dịch trong ngày.
   4. **Kỷ luật vốn tuyệt đối**: Bắt buộc có SL ban đầu cho mọi lệnh, tự động tính volume theo % rủi ro cố định, không bao giờ gồng lỗ, **tuyệt đối không Martingale / không gấp thếp**.
 
 ---
@@ -125,7 +123,8 @@ flowchart TD
   - Số lớn (2.0x - 2.5x): Cho giá không gian rung lắc để ôm trọn các con sóng trend dài.
 - **`Max_Spread_Points = 350`**: Giới hạn spread tối đa cho phép vào lệnh là 35 cents (3.5 pips). Khi thị trường mở cửa ban đêm hoặc có tin bão làm spread dãn vượt 350 points, EA sẽ tự động đứng ngoài không mở lệnh.
 - **`News_Enable = true`**: Tránh giao dịch trước và sau 20 phút khi có tin tức đỏ (High Impact).
-- **`Entry_Mode = 3`**: Bật cả 2 cơ chế (1=Pullback, 2=Breakout, 3=Both).
+- **`Use_TP = true` + `TP_ATR_Mult = 1.5`** `[v2.0]`: Bật Take Profit theo ATR. `Entry_Mode` đã bị bỏ (v2.0 chỉ còn Pullback).
+- **`Max_Equity_DD_Percent = 10.0`** `[v2.0]`: Circuit breaker — DD equity ≥ 10% thì đóng hết lệnh và khóa giao dịch trong ngày.
 
 > 💡 **LƯU Ý QUAN TRỌNG VỀ TÍNH TƯƠNG THÍCH**:  
 > Toàn bộ các file `.set` trên **được thiết kế để dùng chung 100% cho cả Strategy Tester (Backtest) và Biểu đồ Demo trực tiếp (Live Forward Test)**. Khi mở tài khoản demo với bất kỳ số vốn nào (từ 50$ đến 5000$), bạn chỉ cần kéo EA vào biểu đồ demo và **Load đúng file preset tương ứng** là EA sẽ vận hành tự động theo đúng ngân sách rủi ro đã được tính toán.
@@ -228,7 +227,7 @@ Sau khi đã hài lòng với kết quả backtest, bước tiếp theo là treo
 ---
 
 > 📌 **LỜI KHUYÊN KỶ LUẬT CUỐI CÙNG**:
-> - Tuyệt đối không tự ý bật `Use_TP = true` (chiến lược sống nhờ trailing stop theo trend lớn, không chốt non).
+> - `[v2.0]` Take Profit đã được bật mặc định (`Use_TP=true`, `TP_ATR_Mult`). Không tắt SL; không hạ thấp các guard; giữ `Max_Equity_DD_Percent` bật.
 > - Tuyệt đối không bao giờ tắt Stop Loss.
 > - Luôn chạy Forward Test Demo tối thiểu 2 - 4 tuần trước khi nghĩ tới việc nạp tiền thật.
 

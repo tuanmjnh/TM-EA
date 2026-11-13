@@ -9,6 +9,10 @@
 requirements and the canonical input table. This brief adds implementation detail; where the two conflict,
 the non-negotiable rules in section 2 below win, and the spec is expected to be corrected to match.
 
+> ⚠️ **v2.0 (2026-11-12) — STRATEGY CHANGE.** Take Profit is now **enabled** (rule 1 below is superseded),
+> Breakout is **removed** (§4.2 mentions Breakout only historically), and an **equity circuit breaker**
+> (`Max_Equity_DD_Percent`) was added. See `docs/CHANGELOG.md` (v2.0) and `docs/MASTER.md` §3.
+
 ---
 
 ## 1. Mission
@@ -30,7 +34,7 @@ The EA should:
 
 ## 2. Non-negotiable rules
 
-1. `Use_TP=false`; do not send a TP price in entry or modification requests.
+1. ~~`Use_TP=false`; do not send a TP price in entry or modification requests.~~ **[v2.0 — superseded]** Take Profit is enabled: `Use_TP=true` with `TP_ATR_Mult`; when `Use_TP=false`, do not send a TP price.
 2. A new position must have a valid initial SL. If the broker cannot accept the SL with the entry, do not intentionally leave the trade unprotected.
 3. No martingale, grid, averaging down, loss-recovery sizing, or lot escalation after losses.
 4. Calculate volume from cash risk and the actual symbol contract/tick properties. Use `OrderCalcProfit()` where possible to estimate loss from entry to SL in account currency.
@@ -121,7 +125,7 @@ If no valid SL/volume combination exists, skip the trade.
 
 ### 4.4 `CTrailingEngine`
 
-No TP. Use explicit states:
+[v2.0: a fixed ATR Take Profit is set at entry; the trailing engine below remains for the stop.] Explicit states:
 
 1. **Initial protection:** SL is attached at entry.
 2. **Break-even eligibility:** after a configurable favourable move, move SL to entry plus estimated costs for BUY, or entry minus estimated costs for SELL. Do not assume raw entry price is true break-even.
@@ -312,7 +316,7 @@ Do not overwrite previous reports. Every run gets a unique folder. Keep failed a
 
 - Compile without errors; eliminate warnings where practical.
 - Validate all input defaults and enum ranges.
-- Confirm no TP is submitted.
+- If `Use_TP=true`, confirm the TP price is always on the correct side of entry; if `false`, confirm no TP is submitted. `[v2.0]`
 - Confirm every entry has an SL.
 - Confirm no martingale/grid/averaging code exists.
 - Confirm volume rounding is downward and risk cap is never silently exceeded.
@@ -376,7 +380,8 @@ At the end of each phase: compile, run relevant tests, save logs/results, update
 V1 is ready for demo evaluation only when:
 
 - It compiles and runs without critical runtime errors.
-- No TP is ever sent.
+- TP (when enabled, v2.0) is always on the correct side of entry. `[v2.0]`
+- Equity circuit breaker closes all positions and halts at `Max_Equity_DD_Percent`. `[v2.0]`
 - Every opened position has a valid SL.
 - Risk sizing never silently exceeds the configured cap.
 - It cannot increase volume after losses.

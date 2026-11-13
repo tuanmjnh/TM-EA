@@ -1,0 +1,62 @@
+; ==============================================================================
+; KIM LA EA - Conservative Low-Risk Preset (Capital Preservation Priority)
+; Symbol: XAUUSD / XAUUSDm
+; Timeframe: M5
+; Lower risk (0.25%), Max 1 trade per session, TP 2.0x, Circuit Breaker 1.5%
+; ==============================================================================
+
+InpEnabled=true
+InpMagicNumber=20261114
+InpTradeComment=KIM_LA_CONSERV
+
+; --- Indicator Settings
+InpPoints_ATR=14
+InpEMA_D1_Period=200
+InpEMA_H1_Period=50
+InpEMA_M5_Period=20
+InpADX_Period=14
+InpADX_EntryMin=25.0
+InpH1_Flat_Threshold=0.20
+
+; --- Multi-Timeframe Alignment
+InpStrictD1Alignment=true
+
+; --- Risk & Lot Sizing
+InpLotMode=0
+InpRiskPct=0.25
+InpMinLot=0.01
+InpMaxLot=0.05
+InpAllowMinLotFallback=true
+
+; --- Circuit Breakers & Loss Guard
+InpMaxDailyLossPct=1.5
+InpMaxConsecLosses=2
+InpCooldownAfterLossMin=60
+
+; --- Stop Loss & Take Profit
+InpATR_EntryStop=1.8
+InpUseTakeProfit=true
+InpTP_ATR_Mult=2.0
+InpATR_BreakevenBuffer=0.8
+InpTrailStart=2.0
+InpTrailStep1=1.6
+InpTrailStep2=1.2
+InpTrailStep3=0.9
+
+; --- Session Times (GMT)
+InpServerGMTOffset=0
+InpLondonStart_Hour=8
+InpLondonStart_Min=0
+InpLondonEnd_Hour=17
+InpNYStart_Hour=13
+InpNYStart_Min=30
+InpNYEnd_Hour=21
+InpMaxTradesPerSession=1
+InpCloseOnSessionEnd=true
+
+; --- Execution & Protection
+InpExecType=0
+InpMaxSpreadPoints=300
+InpMaxSeconds_EntryFill=60
+InpPullbackSwingBars=4
+InpCooldownReconnectSec=0

@@ -1,0 +1,62 @@
+; ==============================================================================
+; KIM LA EA - Standard USD Account Preset ($500 USD)
+; Symbol: XAUUSD / XAUUSDm
+; Timeframe: M5
+; LOT_MODE_STANDARD (1) for standard currency accounts
+; ==============================================================================
+
+InpEnabled=true
+InpMagicNumber=20261115
+InpTradeComment=KIM_LA_500USD
+
+; --- Indicator Settings
+InpPoints_ATR=14
+InpEMA_D1_Period=200
+InpEMA_H1_Period=50
+InpEMA_M5_Period=20
+InpADX_Period=14
+InpADX_EntryMin=22.0
+InpH1_Flat_Threshold=0.15
+
+; --- Multi-Timeframe Alignment
+InpStrictD1Alignment=true
+
+; --- Risk & Lot Sizing
+InpLotMode=1
+InpRiskPct=0.5
+InpMinLot=0.01
+InpMaxLot=0.05
+InpAllowMinLotFallback=true
+
+; --- Circuit Breakers & Loss Guard
+InpMaxDailyLossPct=2.0
+InpMaxConsecLosses=2
+InpCooldownAfterLossMin=60
+
+; --- Stop Loss & Take Profit
+InpATR_EntryStop=1.8
+InpUseTakeProfit=true
+InpTP_ATR_Mult=2.5
+InpATR_BreakevenBuffer=0.7
+InpTrailStart=2.0
+InpTrailStep1=1.8
+InpTrailStep2=1.3
+InpTrailStep3=1.0
+
+; --- Session Times (GMT)
+InpServerGMTOffset=0
+InpLondonStart_Hour=8
+InpLondonStart_Min=0
+InpLondonEnd_Hour=17
+InpNYStart_Hour=13
+InpNYStart_Min=30
+InpNYEnd_Hour=21
+InpMaxTradesPerSession=2
+InpCloseOnSessionEnd=true
+
+; --- Execution & Protection
+InpExecType=0
+InpMaxSpreadPoints=350
+InpMaxSeconds_EntryFill=60
+InpPullbackSwingBars=4
+InpCooldownReconnectSec=0

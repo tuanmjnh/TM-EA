@@ -1,0 +1,18 @@
+key;value
+symbol;EURUSDm
+expert;TM_SessionBreakout
+end_time;2026.10.30 20:58:59
+deposit;5000.00
+final_balance;4199.41
+net_profit;-800.59
+gross_profit;1672.95
+gross_loss;-2508.66
+profit_factor;0.667
+trades;63
+wins;8
+losses;55
+largest_win;242.78
+largest_loss;-66.40
+max_consec_losses;22
+max_equity_dd_abs;1297.86
+max_equity_dd_pct;24.610

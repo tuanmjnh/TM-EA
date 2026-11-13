@@ -1,8 +1,7 @@
 ; TM-EA - Small Account Preset (100 USD)
 ; Target: XAUUSDm on M5 (Exness point = 0.001).
-; Optimized: Full parameter set, spread guard 350 points (0.35 USD), news filter ON.
-; Risk: 3.0% ($3.00 cash risk per trade) with tight trailing (1.2x ATR) to fit 0.01 lot min volume.
-; Entry_Mode: 3 (Both Pullback and Breakout enabled).
+; Risk: 3.0% ($3.00 cash risk per trade) with tight trailing (1.2x ATR).
+; Pullback-only entry; Take Profit enabled; equity circuit breaker at 10%.
 
 Enabled=true
 MagicNumber=123456
@@ -15,16 +14,14 @@ SlowEMA_HTF=200
 ADX_Period=14
 ADX_Threshold=25.0
 
-;--- Entry (M5 Pullback + Breakout)
+;--- Entry (M5 Pullback only)
 Entry_Timeframe=5
-Entry_Mode=3
 PullbackEMA=20
 Pullback_Buffer_pips=2
-ATR_Channel_Period=14
-BreakoutK=0.7
 
-;--- Exit / Trailing (No TP)
-Use_TP=false
+;--- Exit / Trailing (TP enabled)
+Use_TP=true
+TP_ATR_Mult=1.5
 Trail_ATR_Mult=1.2
 Trail_ATR_Period=14
 Activate_After_Profit_pips=3.0
@@ -37,7 +34,8 @@ Min_Volume=0.01
 Max_Volume=0.02
 Max_Concurrent_Positions=1
 
-;--- Risk Guards (REALISTIC COSTS ACTIVE)
+;--- Risk Guards
+Max_Equity_DD_Percent=10.0
 Max_Daily_Loss_Percent=4.0
 Max_Consecutive_Losses=3
 CoolDown_Minutes=60

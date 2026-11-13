@@ -1,9 +1,8 @@
 ; TM-EA - Realistic Small Account Preset (500 USD)
 ; Target: XAUUSDm on M5 (Exness point = 0.001).
-; Max_Spread_Points: 350 points = 0.35 USD = 3.5 pips (Exness normal spread is ~200-300 points).
-; Risk: 1.0% ($5.00 cash risk per trade) allows 0.01 micro-lot trades with gold M5 stop loss up to 50 pips.
-; Entry_Mode: 3 (Both Pullback and Breakout enabled).
-; All protective risk guards active.
+; Max_Spread_Points: 350 points = 0.35 USD = 3.5 pips.
+; Risk: 1.0% ($5.00 cash risk per trade) allows 0.01 micro-lot trades.
+; Pullback-only entry; Take Profit enabled; equity circuit breaker at 10%.
 
 Enabled=true
 MagicNumber=123456
@@ -16,16 +15,14 @@ SlowEMA_HTF=200
 ADX_Period=14
 ADX_Threshold=25.0
 
-;--- Entry (M5 Pullback + Breakout)
+;--- Entry (M5 Pullback only)
 Entry_Timeframe=5
-Entry_Mode=3
 PullbackEMA=20
 Pullback_Buffer_pips=2
-ATR_Channel_Period=14
-BreakoutK=0.7
 
-;--- Exit / Trailing (No TP)
-Use_TP=false
+;--- Exit / Trailing (TP enabled)
+Use_TP=true
+TP_ATR_Mult=1.5
 Trail_ATR_Mult=2.0
 Trail_ATR_Period=14
 Activate_After_Profit_pips=4.0
@@ -39,6 +36,7 @@ Max_Volume=0.03
 Max_Concurrent_Positions=1
 
 ;--- Risk Guards
+Max_Equity_DD_Percent=10.0
 Max_Daily_Loss_Percent=2.0
 Max_Consecutive_Losses=3
 CoolDown_Minutes=45

@@ -1,0 +1,20 @@
+key;value
+symbol;EURUSDm
+expert;TM_TrendFollowerScalper
+end_time;2026.07.30 23:59:55
+deposit;500.00
+final_balance;329.38
+net_profit;-170.62
+gross_profit;199.95
+gross_loss;-369.97
+profit_factor;0.540
+trades;362
+wins;72
+losses;290
+commission;0.00
+swap;-0.67
+largest_win;14.19
+largest_loss;-9.09
+max_consec_losses;26
+max_equity_dd_abs;198.58
+max_equity_dd_pct;38.968
