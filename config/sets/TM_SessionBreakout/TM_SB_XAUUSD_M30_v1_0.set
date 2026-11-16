@@ -1,0 +1,27 @@
+; TM-EA / TM_SessionBreakout - M30 signals (XAUUSDm)
+; Same session logic, breakout detected on M30 bars. 3Y: PF ~1.456, DD ~11.4%.
+; H1 remains better; use M30 only if you want finer timing. RESEARCH CANDIDATE.
+
+Enabled=true
+MagicNumber=555002
+TradeComment=TM_SB_M30
+Entry_TF=30
+
+RangeStartHour=0
+RangeEndHour=7
+TradeStartHour=7
+TradeEndHour=20
+
+Use_ADX_Filter=true
+ADX_Period=14
+ADX_Min=20.0
+Min_Range_ATR=0.0
+Max_Range_ATR=100.0
+RR=5.0
+SL_Range_Fraction=1.0
+OneTradePerDay=true
+
+RiskPercentPerTrade=1.0
+Min_Volume=0.01
+Max_Volume=0.50
+Max_Spread_Points=350

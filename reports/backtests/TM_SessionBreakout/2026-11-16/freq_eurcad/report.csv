@@ -1,0 +1,18 @@
+key;value
+symbol;EURCADm
+expert;TM_SessionBreakout
+end_time;2026.10.30 20:58:59
+deposit;5000.00
+final_balance;2871.48
+net_profit;-2128.52
+gross_profit;1401.63
+gross_loss;-3584.79
+profit_factor;0.391
+trades;111
+wins;9
+losses;102
+largest_win;203.72
+largest_loss;-51.20
+max_consec_losses;21
+max_equity_dd_abs;2451.36
+max_equity_dd_pct;47.884

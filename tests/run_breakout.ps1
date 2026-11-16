@@ -3,6 +3,7 @@ param(
   [double]$Deposit=500,
   [double]$Risk=1.0,
   [double]$RR=2.0,
+  [double]$SlFrac=1.0,
   [int]$RangeStart=0,
   [int]$RangeEnd=7,
   [int]$TradeStart=7,
@@ -17,7 +18,10 @@ param(
   [bool]$UseADX=$false,
   [double]$ADXMin=20.0,
   [double]$MinRangeAtr=0.0,
-  [double]$MaxRangeAtr=100.0
+  [double]$MaxRangeAtr=100.0,
+  [int]$EntryTf=16385,
+  [bool]$Multi=$false,
+  [bool]$Session2=$true
 )
 
 $exe='C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe'
@@ -28,13 +32,14 @@ $outDir='D:\Applications\TM-EA\reports\backtests\_sb'
 New-Item -ItemType Directory -Force -Path $outDir | Out-Null
 Remove-Item $csv -ErrorAction SilentlyContinue
 
+$tfName = switch($EntryTf){ 5{'M5'} 15{'M15'} 30{'M30'} 16385{'H1'} 16388{'H4'} default{'H1'} }
 $ini = @"
 [Common]
 
 [Tester]
 Expert=TM_SessionBreakout.ex5
 Symbol=$Sym
-Period=H1
+Period=$tfName
 Optimization=0
 Model=$Model
 FromDate=$From
@@ -59,10 +64,13 @@ TradeStartHour=$TradeStart||7||1||23||N
 TradeEndHour=$TradeEnd||20||1||23||N
 RiskPercentPerTrade=$Risk||$Risk||0.05||5.0||N
 RR=$RR||$RR||0.25||10.0||N
+SL_Range_Fraction=$SlFrac||$SlFrac||0.05||2.0||N
 Min_Volume=0.01||0.01||0.01||0.1||N
 Max_Volume=$MaxVol||$MaxVol||0.01||1.0||N
 Max_Spread_Points=$MaxSpread||350||1||1000||N
-OneTradePerDay=true||false||0||true||N
+Entry_TF=$EntryTf||16385||0||49153||N
+OneTradePerDay=$(if($Multi){'false'}else{'true'})||false||0||true||N
+Use_Session2=$(if($Session2){'true'}else{'false'})||false||0||true||N
 Use_ADX_Filter=$(if($UseADX){'true'}else{'false'})||false||0||true||N
 ADX_Period=14||14||1||140||N
 ADX_Min=$ADXMin||$ADXMin||1.0||100.0||N

@@ -1,0 +1,27 @@
+; TM-EA / TM_SessionBreakout - M15 signals (XAUUSDm)
+; Same session logic, breakout detected on M15 bars. 3Y: PF ~1.217, DD ~14.6%.
+; Best risk-adjusted result is H1; M15 is noisier. RESEARCH CANDIDATE.
+
+Enabled=true
+MagicNumber=555003
+TradeComment=TM_SB_M15
+Entry_TF=15
+
+RangeStartHour=0
+RangeEndHour=7
+TradeStartHour=7
+TradeEndHour=20
+
+Use_ADX_Filter=true
+ADX_Period=14
+ADX_Min=20.0
+Min_Range_ATR=0.0
+Max_Range_ATR=100.0
+RR=5.0
+SL_Range_Fraction=1.0
+OneTradePerDay=true
+
+RiskPercentPerTrade=1.0
+Min_Volume=0.01
+Max_Volume=0.50
+Max_Spread_Points=350

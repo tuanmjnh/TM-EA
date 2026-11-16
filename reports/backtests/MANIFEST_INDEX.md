@@ -1,11 +1,11 @@
 # Backtest Manifest Index (P3 audit)
 
-**Ngày:** 2026-11-12
-Tổng hợp phân loại mọi lần kiểm thử hiện có. Không thay thế report gốc — mỗi run có manifest riêng trong folder tương ứng.
+**Ngày:** 2026-11-13
+Tổng hợp phân loại mọi lần kiểm thử hiện có. Cấu trúc: `<Bot>/<Ngày chạy>/<Cấu hình>/` (mỗi run có `report.csv` + `manifest.md`). Không thay thế report gốc.
 
 > ⚠️ **v2.0 (2026-11-12):** tất cả run dưới đây được tạo bởi build **trước v2.0** (no-TP, có Breakout). Sau khi đổi sang **Pullback-only + Take Profit + circuit breaker**, **mọi report này vô hiệu cho v2.0** và chỉ còn giá trị lịch sử. Cần chạy lại toàn bộ (cost-stress + OOS) sau khi compile.
 
-## v2.0 runs (2026-11-13) — xem `_v2/`
+## v2.0 runs (2026-11-13) — `TM_TrendFollowerScalper/2026-11-13/`
 
 Đã chạy lại real-tick 3 tháng cho v2.0. Tóm tắt:
 
@@ -18,7 +18,11 @@ Tổng hợp phân loại mọi lần kiểm thử hiện có. Không thay thế
 | small_50 | 50 | −7.96 | 0.121 |
 | cost_stress_10000 | 10 000 | −410.00 | 0.601 |
 
-EX5 `0F50E9E0ADD72C90`; chi tiết & tái lập: `_v2/V2_BACKTEST_RESULTS.md`, `_v2/*.csv`, `tests/run_backtest_v2.ps1`.
+EX5 `0F50E9E0ADD72C90`; chi tiết & tái lập: `TM_TrendFollowerScalper/V2_BACKTEST_RESULTS.md`, `TM_TrendFollowerScalper/2026-11-13/*/report.csv`, `tests/run_backtest_v2.ps1`. Nghiên cứu tiếp: `RESEARCH_LOG.md`, `OPTIMIZATION_STUDY.md`, `SET_SELECTION_STUDY.md`.
+
+## Session-Breakout runs (2026-11-13) — `TM_SessionBreakout/2026-11-13/`
+
+Chiến lược mới (range-breakout H1 theo phiên). Kết quả tốt nhất: **ADX20 + RR5 → 3Y PF 1.665 / DD 7.9%**, walk-forward 3/3 năm dương. Chi tiết: `TM_SessionBreakout/SB_RESEARCH.md`; runner `tests/run_breakout.ps1`.
 
 | # | Preset / folder | Report | Deposit | Quality | Risk% | Net | PF | Trades | EqDD | Phân loại |
 |---|---|---|---|---|---|---|---|---|---|---|
@@ -47,4 +51,5 @@ Mọi run ở trên: chỉ 3 tháng dữ liệu (`2026.08.01–2026.10.31`), 1 s
 
 ## Quy ước tên manifest
 
-Mỗi run: `manifest_<Preset>_<YYYY.MM.DD.HH.MM>.md` cạnh report HTML. `manifest.md` cũ (conservative, cost_stress) **được giữ nguyên** làm lịch sử; bản mới là bản có ngày giờ.
+- Report MT5 gốc (2026-11-12): `manifest*.md` cạnh file HTML trong `<Bot>/2026-11-12/<Preset>/` (giữ nguyên, có bản audit sau).
+- Run nghiên cứu (từ 2026-11-13): mỗi run một folder `<Bot>/<YYYY-MM-DD>/<cấu hình>/` chứa `report.csv` + `manifest.md`.

@@ -1,0 +1,18 @@
+key;value
+symbol;XAUUSDm
+expert;TM_Wonderwhales
+end_time;2026.10.30 20:57:59
+deposit;5000.00
+final_balance;3172.28
+net_profit;-1827.72
+gross_profit;12818.77
+gross_loss;-14670.59
+profit_factor;0.874
+trades;626
+wins;192
+losses;434
+largest_win;120.35
+largest_loss;-102.67
+max_consec_losses;22
+max_equity_dd_abs;2574.41
+max_equity_dd_pct;45.249

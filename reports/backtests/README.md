@@ -1,36 +1,48 @@
-# Thư mục Báo cáo Backtest (Strategy Tester Reports)
+# Thư mục Báo cáo Backtest — Quy chuẩn lưu trữ
 
-Cấu trúc lưu trữ báo cáo được phân cấp rõ ràng theo **Tên EA / Robot** và **Tên cấu hình Preset (.set)** để dễ dàng đối chiếu, quản lý theo thời gian.
-
-## Cấu trúc thư mục
+Cấu trúc chuẩn: **`<Tên Bot> / <Ngày chạy> / <Cấu hình>`**.
 
 ```text
 reports/backtests/
-├── README.md                               # Hướng dẫn quy chuẩn lưu trữ báo cáo
-├── _template/                              # Mẫu manifest.md cho mỗi lần test
-└── TM_TrendFollowerScalper/                # Thư mục theo tên Bot
-    ├── TM_TFS_small_50/                    # Vốn 50 USD (Micro Account)
-    ├── TM_TFS_small_100/                   # Vốn 100 USD
-    ├── TM_TFS_realistic_200/               # Vốn 200 USD
-    ├── TM_TFS_realistic_500/               # Vốn 500 USD (Khuyến nghị chuẩn)
-    ├── TM_TFS_standard_1000/              # Vốn 1.000 USD
-    ├── TM_TFS_conservative_5000/           # Vốn 5.000 USD
-    ├── TM_TFS_cost_stress_10000/           # Vốn 10.000 USD (Kiểm tra chịu tải chi phí thật)
-    └── TM_TFS_baseline_10000/              # Báo cáo chuẩn đoán ban đầu
+├── README.md                     # file này (quy chuẩn)
+├── MANIFEST_INDEX.md             # chỉ mục tổng hợp mọi run
+├── _template/                    # mẫu manifest.md
+├── TM_TrendFollowerScalper/      # Bot 1 (chiến lược trend-following)
+│   ├── V2_BACKTEST_RESULTS.md    # báo cáo nghiên cứu (bot-level)
+│   ├── RESEARCH_LOG.md
+│   ├── OPTIMIZATION_STUDY.md
+│   ├── SET_SELECTION_STUDY.md
+│   ├── 2026-11-12/               # report MT5 gốc (HTML), theo preset
+│   │   ├── TM_TFS_cost_stress_10000/
+│   │   │   ├── ReportTester-*.html + ảnh
+│   │   │   └── manifest*.md
+│   │   └── ... (9 preset) + tmp/
+│   └── 2026-11-13/               # run nghiên cứu (CSV do EA xuất)
+│       └── <cấu hình>/
+│           ├── report.csv
+│           └── manifest.md
+└── TM_SessionBreakout/           # Bot 2 (range-breakout H1 theo phiên)
+    ├── SB_RESEARCH.md            # báo cáo nghiên cứu (bot-level)
+    └── 2026-11-13/
+        └── <cấu hình>/
+            ├── report.csv
+            └── manifest.md
 ```
 
-## Quy chuẩn đặt tên file xuất báo cáo từ MT5
+## Quy ước đặt tên
 
-Khi xuất file HTML từ MT5 Strategy Tester (Chuột phải tab Backtest -> Report -> HTML), hãy lưu file vào đúng thư mục cấu hình preset tương ứng và đặt tên theo cú pháp:
+- **Tên Bot:** tên file EA không đuôi (ví dụ `TM_TrendFollowerScalper`, `TM_SessionBreakout`).
+- **Ngày chạy:** `YYYY-MM-DD` theo ngày chạy trên máy (không phải giai đoạn test).
+- **Cấu hình:** tên run, mã hoá cờ/tham số (ví dụ `fx_3y_adx20_rr5`, `sb_12m_rr3`, `r6_realistic_500`).
 
-`<Tên_Preset>_<YYYY.MM.DD_HH.MM>.html`
+Mỗi thư mục cấu hình chứa:
+1. `report.csv` — số liệu do EA xuất (net, PF, trades, DD, commission…).
+2. `manifest.md` — tóm tắt bot / ngày / cấu hình / chỉ số chính.
 
-*Ví dụ:*
-- `TM_TFS_small_50_2026.11.12_12.00.html` (Lưu vào `TM_TFS_small_50/`)
-- `TM_TFS_realistic_500_2026.11.12_11.22.html` (Lưu vào `TM_TFS_realistic_500/`)
+## Ghi chú kỹ thuật
 
-## Thành phần bắt buộc khi lưu báo cáo
-Mỗi lần chạy backtest hoàn chỉnh cần có:
-1. File xuất báo cáo HTML (`.html` hoặc `.htm`) kèm ảnh đồ thị sinh ra từ MT5.
-2. File preset `.set` đã dùng trong lần chạy đó.
-3. Bảng tóm tắt manifest theo mẫu `_template/manifest.md` ghi nhận: Thời gian test, Broker, Symbol, Spread/Commission, Net Profit, Profit Factor, Max Drawdown.
+- Report MT5 gốc (2026-11-12) là **HTML chụp từ Strategy Tester GUI** (Model 4 real ticks), kèm `manifest*.md` phân tích.
+- Từ 2026-11-13, EA tự xuất **CSV** trong Strategy Tester (khóa `Report=` của MT5 không hoạt động ở chế độ `/config`), runner copy về đây.
+- Runner: `tests/run_backtest_v2.ps1` (bot TF) · `tests/run_breakout.ps1` (bot SB).
+- **Không ghi đè** report cũ. Mọi run lưu giữ, kể cả run âm (bằng chứng quan trọng).
+- `.set`/hash/broker/spec của mỗi run: xem `manifest.md` + `docs/TECHNICAL_AUDIT.md`.

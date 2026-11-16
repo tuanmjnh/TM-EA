@@ -1,0 +1,18 @@
+key;value
+symbol;USDCADm
+expert;TM_SessionBreakout
+end_time;2026.10.30 20:58:58
+deposit;5000.00
+final_balance;4921.16
+net_profit;-78.84
+gross_profit;3411.26
+gross_loss;-3564.09
+profit_factor;0.957
+trades;90
+wins;16
+losses;74
+largest_win;229.01
+largest_loss;-81.60
+max_consec_losses;13
+max_equity_dd_abs;975.13
+max_equity_dd_pct;18.536

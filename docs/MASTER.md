@@ -6,7 +6,7 @@
 **Platform:** MetaTrader 5 / MQL5  
 **Symbol / TF:** XAUUSD (XAUUSDm) / M5  
 **Last updated:** 2026-11-12 (v2.0 strategy change)  
-**Status:** **v3.1** — chiến lược trend cũ thua 6/6 vòng; **EA `TM_SessionBreakout` (range-breakout H1) + lọc ADX(H1)** là **kết quả ổn định nhất của dự án**: 3Y PF **1.665**, DD **7.9%**; walk-forward **3/3 năm dương** (W1 1.03 / W2 2.69 / W3 1.50); plateau RR4–6. **NHƯNG chưa xác nhận** (commission=0, mẫu nhỏ, fail EURUSD) → **không chạy tiền thật**; bước bắt buộc tiếp theo là test có phí. Đóng: BUG-006/013. Mở: BUG-002/003/004/007/008. Xem `reports/backtests/_sb/SB_RESEARCH.md`, `CHANGELOG.md` (v3.1).
+**Status:** **v3.9** — SB **đã đóng băng** (set + preset Cent + kế hoạch forward). `TM_SessionBreakout` (SB) chốt cấu hình XAU: **H1 · range 00–07 · vào 07–20 · ADX(H1)≥20 · SL=range · RR5 · 1 lệnh/ngày** → 3Y PF **1.666**, DD **7.9%**, walk-forward **3/3 năm dương**. Đã sửa **bug SL_Range_Fraction** (đã bác bỏ bảng frac cũ + 2 bẫy overfit NY/frac1.25). Preset: `config/sets/TM_SessionBreakout/`. **Chưa xác nhận** cho tiền thật (commission/slippage chưa model thật, mẫu nhỏ, chưa test symbol khác). EA trend cũ: thua 6/6 vòng. `CHANGELOG.md` (v3.4).
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
 > Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  
@@ -60,7 +60,9 @@ TM-EA/
 │       ├── TradeExecutor.mqh   # Đặt lệnh thị trường, kiểm tra SL, chặn TP
 │       ├── TrailingEngine.mqh  # Trailing stop động ATR & Breakeven
 │       └── RiskGuard.mqh       # Chặn spread, tin tức, phiên, daily loss, cooldown
-├── config/sets/                # Preset .set có version hóa
+├── config/
+│   ├── sets/                   # Preset .set, chia theo EA: <EA>/<preset>.set
+│   └── ini/                    # Cấu hình Strategy Tester (.ini), chia theo EA
 ├── reports/
 │   ├── backtests/              # Báo cáo MT5 Strategy Tester (phân cấp theo bot & preset)
 │   │   ├── README.md           # Hướng dẫn cấu trúc & quy ước lưu report

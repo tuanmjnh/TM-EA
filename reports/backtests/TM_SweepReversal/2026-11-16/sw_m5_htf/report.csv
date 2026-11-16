@@ -1,0 +1,18 @@
+key;value
+symbol;XAUUSDm
+expert;TM_SweepReversal
+end_time;2026.10.30 20:57:59
+deposit;5000.00
+final_balance;1720.88
+net_profit;-3279.12
+gross_profit;28045.86
+gross_loss;-31324.98
+profit_factor;0.895
+trades;1556
+wins;563
+losses;993
+largest_win;959.69
+largest_loss;-72.65
+max_consec_losses;13
+max_equity_dd_abs;4896.36
+max_equity_dd_pct;76.473

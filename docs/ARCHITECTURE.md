@@ -252,7 +252,7 @@ Input names must remain stable after a release. If an input is renamed or its me
 
 Store all MT5 input presets under:
 
-`config/sets/`
+`config/sets/<ExpertName>/` (per-EA subfolder, e.g. `config/sets/TM_SessionBreakout/`).
 
 Naming convention:
 

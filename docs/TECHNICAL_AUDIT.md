@@ -13,6 +13,8 @@
 |---|---|
 | `MQL5/Experts/TM_TrendFollowerScalper.mq5` | `9696E6951A236500` (v2.5) |
 | `MQL5/Experts/TM_TrendFollowerScalper.ex5` | `F76C419727E08752` (v2.5, compiled 0/0) |
+| `MQL5/Experts/TM_SessionBreakout.mq5` | `1B849DBE158E4C89` (v3.4) |
+| `MQL5/Experts/TM_SessionBreakout.ex5` | `6056689F0723FDA8` (v3.4, compiled 0/0) |
 | `MQL5/Experts/TM_TrendFollowerScalper.ex5` | `B6EC2DAED291B047` |
 | `MQL5/Include/TM_EA/Types.mqh` | `49A7443740C05E2A` (v2.1) |
 | `MQL5/Include/TM_EA/Inputs.mqh` | `2620B7BAA5C36A49` (v2.5) |

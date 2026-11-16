@@ -1,0 +1,415 @@
+//@version=6
+indicator("Wonderwhales", shorttitle = "WWHALES", overlay = false, max_labels_count = 500, max_lines_count = 500, max_bars_back = 1000)
+
+// =============================================================================
+//  WONDERWHALES — Parabolic SAR Reversal Signals with VSA & Multi-Indicators
+//  Architecture: Pine Script v6 Modular Build System (tools/build.mjs)
+//  Version: 1.2.0 | Target: wonderwhales
+//  Components: Parabolic SAR Flip Engine, Anti-Repainting Bar Confirmation,
+//              Volume Spread Analysis (VSA 6-Bucket Barcolor & Climax Markers),
+//              Optional Filters (EMA 20/50/200, ATR %, RSI 14, Bollinger Bands),
+//              Compact HUD Dashboard Table, Multi-Condition Alerts
+// =============================================================================
+
+// =============================================================================
+//  SHARED HELPERS - code dung chung MOI target (chen qua marker SHARED trong 00_header)
+//  - f_sessionOk : loc phien giao dich (dung cho XAU/XAG/forex, crypto de trong)
+//  - f_vsaColor  : 6 mau bucket volume VSA - TIM = volume dot bien (vol >= ma * rP)
+//  - f_vsaName   : ten bucket tuong ung, dung cho dashboard
+//  Quy uoc: ham f_* thuan (khong phu thuoc input) - dua vao day de cac
+//  indicator moi (TM Signals, TM VSA Wyckoff, ...) dung lai mot lan dinh nghia.
+// =============================================================================
+
+f_sessionOk(string sess, string tz) =>
+    not na(time(timeframe.period, sess, tz))
+
+f_vsaColor(float vol, float ma, float rP, float rVH, float rH, float rN, float rL) =>
+    vol >= ma * rP ? color.purple : vol >= ma * rVH ? color.red : vol >= ma * rH ? color.orange : vol >= ma * rN ? color.green : vol >= ma * rL ? color.blue : color.silver
+
+f_vsaName(float vol, float ma, float rP, float rVH, float rH, float rN, float rL) =>
+    vol >= ma * rP ? "TIM" : vol >= ma * rVH ? "VeryHigh" : vol >= ma * rH ? "High" : vol >= ma * rN ? "Normal" : vol >= ma * rL ? "Low" : "VeryLow"
+
+// --- Pure math / formatting (truoc do copy 3 ban trong parts/, parts-xau/, parts-xau2/) ---
+f_clamp(float v, float lo, float hi) =>
+    math.max(lo, math.min(hi, v))
+
+f_fmtPx(float p) =>
+    str.tostring(p, format.mintick)
+
+f_isNewDay() =>
+    ta.change(time("D")) != 0
+
+// --- Alert JSON helpers (truoc do copy trong parts/70_alerts + xau/90 + xau2/99) ---
+// CANH BAO: str.format_time(time, format, timezone) - `time` (series int) di TRUOC.
+// Dau tien la UNIX timestamp, thu hai moi la chuoi format. Dao nguoc -> CE10123
+// "argument of literal string type was used but a series int is expected".
+f_ts() =>
+    str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC")
+
+f_sym() =>
+    str.replace_all(syminfo.ticker, "\\", "/")
+
+// --- Session windows - chuan 5 ban (parts/vsa/sweep/xau/xau2 dashboard) ---
+//  Asia 1700-0200 / London 0200-1000 / NY 0700-1500 (moc gio NY, xem docs/time-rules.md)
+f_sessAsia(string tz) =>
+    not na(time(timeframe.period, "1700-0200", tz))
+
+f_sessLondon(string tz) =>
+    not na(time(timeframe.period, "0200-1000", tz))
+
+f_sessNy(string tz) =>
+    not na(time(timeframe.period, "0700-1500", tz))
+
+f_sessName(bool asia, bool london, bool ny) =>
+    london and ny ? "London/NY" : ny ? "New York" : london ? "London" : asia ? "Asia" : "-"
+
+// =============================================================================
+//  WONDERWHALES — CONFIGURATION & USER INPUTS
+//  Clean signal core + Display overlays for VSA, Indicators & HUD
+// =============================================================================
+
+// --- Parabolic SAR Settings ---
+ww_psarStart = input.float(0.02, "Initial Acceleration Factor", minval = 0.001, step = 0.005, group = "Parabolic SAR", tooltip = "Starting acceleration factor (AF) for Parabolic SAR calculation.")
+ww_psarInc   = input.float(0.02, "Increment",                   minval = 0.001, step = 0.005, group = "Parabolic SAR", tooltip = "Acceleration factor step increment added each time a new extreme price is reached.")
+ww_psarMax   = input.float(0.2,  "Maximum Acceleration Factor", minval = 0.01,  step = 0.05,  group = "Parabolic SAR", tooltip = "Upper ceiling limit for the acceleration factor.")
+
+// --- Signal & Mode Settings (100% Unchanged) ---
+ww_mode           = input.string("Parabolic SAR Reversal", "Signal Mode", options = ["Parabolic SAR Reversal", "EMA Crossover", "SAR + EMA Trend Filter", "SAR + EMA + ATR Filter"], group = "Signal Settings", tooltip = "Parabolic SAR Reversal: Pure PSAR reversal flips.\nEMA Crossover: Fast EMA crossing Slow EMA.\nSAR + EMA Trend Filter: PSAR flips aligned with EMA direction.\nSAR + EMA + ATR Filter: PSAR flips aligned with EMA direction and ATR% volatility.", display = display.none)
+ww_confirmOnClose = input.bool(true, "Confirm signals on bar close", group = "Signal Settings", tooltip = "When enabled, signals and alerts only finalize once the bar has officially closed (barstate.isconfirmed) to avoid repainting. When disabled, signals trigger mid-bar in real time.", display = display.none)
+ww_lang           = input.string("EN (BUY/SELL)", "Label Language", options = ["EN (BUY/SELL)", "CN (买/卖)"], group = "Signal Settings", tooltip = "Language text displayed inside signal labels.", display = display.none)
+
+// --- Volume VSA Display (Subpane Default ON, Candle Color Default OFF) ---
+ww_showVol        = input.bool(true,  "Show VSA Volume Pane",     group = "Volume VSA (Display)", tooltip = "Render VSA colored volume histogram columns in lower pane.", display = display.none)
+ww_showVolMa      = input.bool(true,  "Show Volume MA Line",      group = "Volume VSA (Display)", tooltip = "Render Volume moving average line in lower pane.", display = display.none)
+ww_vsaBarColor    = input.bool(false, "Color Bars by VSA Volume", group = "Volume VSA (Display)", tooltip = "Color candles based on 6 VSA volume buckets: Purple (Climax >= 2.5x MA), Red (Very High >= 2.0x), Orange (High >= 1.5x), Green (Normal >= 1.0x), Blue (Low >= 0.5x), Silver (Ultra Low < 0.5x). Default OFF to keep TradingView default candle colors.", display = display.none)
+ww_vsaShowMarkers = input.bool(false, "Show VSA Climax Markers", group = "Volume VSA (Display)", tooltip = "Display small marker above candles with Climax volume spike (Purple).", display = display.none)
+ww_volMaLen       = input.int(20,     "Volume MA Length",         minval = 1,   group = "Volume VSA (Display)", tooltip = "Lookback period for calculating average volume.", display = display.none)
+ww_volSpikeR      = input.float(2.5,  "Climax / Spike Ratio",     minval = 1.0, step = 0.1, group = "Volume VSA (Display - Default ON)", tooltip = "Volume >= MA * Ratio triggers Climax (Purple).", display = display.none)
+ww_volVeryHighR   = input.float(2.0,  "Very High Ratio",          minval = 1.0, step = 0.1, group = "Volume VSA (Display - Default ON)", tooltip = "Volume >= MA * Ratio triggers Very High (Red).", display = display.none)
+ww_volHighR       = input.float(1.5,  "High Ratio",               minval = 1.0, step = 0.1, group = "Volume VSA (Display - Default ON)", tooltip = "Volume >= MA * Ratio triggers High (Orange).", display = display.none)
+ww_volNormalR     = input.float(1.0,  "Normal Ratio",             minval = 0.5, step = 0.1, group = "Volume VSA (Display - Default ON)", tooltip = "Volume >= MA * Ratio triggers Normal (Green).", display = display.none)
+ww_volLowR        = input.float(0.5,  "Low Ratio",                minval = 0.1, step = 0.1, group = "Volume VSA (Display - Default ON)", tooltip = "Volume >= MA * Ratio triggers Low (Blue). Below this is Ultra Low (Silver).", display = display.none)
+
+// --- Optional EMA Filter Settings ---
+ww_fastEmaLen  = input.int(20,    "Fast EMA Length", minval = 1, group = "EMA Filter (Optional)", tooltip = "Period length for fast Exponential Moving Average.", display = display.none)
+ww_slowEmaLen  = input.int(50,    "Slow EMA Length", minval = 2, group = "EMA Filter (Optional)", tooltip = "Period length for slow Exponential Moving Average. Must exceed Fast EMA length.", display = display.none)
+ww_showEma     = input.bool(false, "Show Fast/Slow EMA Lines",   group = "EMA Filter (Optional)", tooltip = "Toggle display of Fast (20) and Slow (50) EMA curves on chart.", display = display.none)
+
+// --- Optional ATR Volatility Filter Settings ---
+ww_atrLen    = input.int(14,     "ATR Length",                minval = 1,    group = "ATR Volatility Filter (Optional)", tooltip = "Lookback period for Average True Range.", display = display.none)
+ww_minAtrPct = input.float(0.5,  "Minimum ATR as % of Price", minval = 0.01, step = 0.1, group = "ATR Volatility Filter (Optional)", tooltip = "ATR % = (ATR / Close) * 100. Signals are blocked if ATR% is below this threshold to filter out low-volatility chop.", display = display.none)
+ww_showDebug = input.bool(false, "Show Blocked Signals (Debug)", group = "Visual Settings", tooltip = "Display neutral markers where raw signals were filtered out by EMA or ATR gates.", display = display.none)
+
+// --- Secondary Indicators (Display - Default: OFF) ---
+ww_showEma200 = input.bool(false, "Show 200 EMA Baseline",      group = "Secondary Indicators (Display)", tooltip = "Toggle display of 200 EMA long-term trend baseline on chart.", display = display.none)
+ww_ema200Len  = input.int(200,   "200 EMA Length",  minval = 10, group = "Secondary Indicators (Display)", tooltip = "Period length for long-term baseline EMA.", display = display.none)
+ww_showBb     = input.bool(false, "Show Bollinger Bands",      group = "Secondary Indicators (Display)", tooltip = "Toggle display of Bollinger Bands on chart.", display = display.none)
+ww_bbLen      = input.int(20,     "BB Length", minval = 1,      group = "Secondary Indicators (Display)", tooltip = "Moving average period for Bollinger Bands.", display = display.none)
+ww_bbMult     = input.float(2.0,  "BB StdDev Multiplier", minval = 0.1, step = 0.1, group = "Secondary Indicators (Display)", tooltip = "Standard deviation multiplier for Bollinger Bands.", display = display.none)
+
+// --- Visual & Display Settings ---
+ww_showTrendCandles = input.bool(true, "Show SAR Trend Candles (BUY=Neon Green, SELL=Neon Red)", group = "Visual Settings", tooltip = "When enabled (default), candles are rendered by Parabolic SAR regime: Neon Green (#00ff00) from BUY until SELL, and Neon Red (#ff0000) from SELL until BUY (like 3.PNG). With overlay = true, hovering over the Parabolic SAR dots brings the neon candles to the front (hover elevation).", display = display.none)
+ww_showPsar   = input.bool(true, "Show Parabolic SAR", group = "Visual Settings", tooltip = "Toggle display of Parabolic SAR dots/crosses on chart.", display = display.none)
+ww_psarColor  = input.color(color.rgb(234, 91, 247), "PSAR Color", group = "Visual Settings", tooltip = "Color tint for Parabolic SAR markers.", display = display.none)
+ww_showLabels = input.bool(true, "Show Buy/Sell Labels", group = "Visual Settings", tooltip = "Toggle display of BUY and SELL signal shapes on chart.", display = display.none)
+ww_iconStyle  = input.string("Triangle", "Signal Icon Style", options = ["Triangle", "Compact Label"], group = "Visual Settings", tooltip = "Triangle: Minimalist compact triangle icon with small text (clean & unobtrusive).\nCompact Label: Traditional rounded speech-bubble box.", display = display.none)
+ww_labelSize  = input.string("Tiny", "Signal Size", options = ["Tiny", "Small", "Normal"], group = "Visual Settings", tooltip = "Visual size of BUY and SELL signal shapes and text.", display = display.none)
+
+// --- HUD Dashboard (Display - Default: OFF) ---
+ww_showDash = input.bool(false, "Show HUD Dashboard", group = "HUD Dashboard (Display)", tooltip = "Toggle display of on-chart multi-metric status HUD table (shows PSAR Trend, VSA Volume, RSI, EMA, ATR).", display = display.none)
+ww_dashPos  = input.string("Top Right", "Dashboard Position", options = ["Top Right", "Bottom Right", "Top Left", "Bottom Left"], group = "HUD Dashboard (Display)", tooltip = "Anchor location of the HUD table on chart.", display = display.none)
+ww_dashSize = input.string("Small", "Dashboard Text Size", options = ["Tiny", "Small", "Normal"], group = "HUD Dashboard (Display)", tooltip = "Font sizing inside HUD cells.", display = display.none)
+ww_rsiLen   = input.int(14, "RSI Length for HUD", minval = 1, group = "HUD Dashboard (Display)", tooltip = "RSI period length shown in HUD dashboard.", display = display.none)
+
+// =============================================================================
+//  WONDERWHALES — CORE VALIDATION & GUARDS (v1.1.3)
+// =============================================================================
+
+// Ensure PSAR max acceleration factor is not lower than start acceleration factor
+psarMaxSafe = math.max(ww_psarStart, ww_psarMax)
+
+// Ensure EMA periods are strictly positive and slow length strictly greater than fast length
+fastEmaSafe = math.max(1, ww_fastEmaLen)
+slowEmaSafe = math.max(fastEmaSafe + 1, ww_slowEmaLen)
+ema200Safe  = math.max(10, ww_ema200Len)
+
+// Ensure ATR period is strictly positive
+atrLenSafe = math.max(1, ww_atrLen)
+
+// Ensure Volume MA and Secondary indicators have positive lookbacks
+volMaLenSafe = math.max(1, ww_volMaLen)
+rsiLenSafe   = math.max(1, ww_rsiLen)
+bbLenSafe    = math.max(1, ww_bbLen)
+
+// Language selection flags
+ww_isLangEn = ww_lang == "EN (BUY/SELL)"
+ww_isLangCn = ww_lang == "CN (买/卖)"
+
+// Icon style selection flags
+ww_isStyleTriangle = ww_iconStyle == "Triangle"
+ww_isStyleLabel    = ww_iconStyle == "Compact Label"
+
+// Label size selection flags
+ww_isSizeTiny   = ww_labelSize == "Tiny"
+ww_isSizeSmall  = ww_labelSize == "Small"
+ww_isSizeNormal = ww_labelSize == "Normal"
+
+// Dashboard table position mapping
+ww_tablePos = ww_dashPos == "Bottom Right" ? position.bottom_right : ww_dashPos == "Top Left" ? position.top_left : ww_dashPos == "Bottom Left" ? position.bottom_left : position.top_right
+
+// Dashboard table text size mapping
+ww_tableTextSize = ww_dashSize == "Tiny" ? size.tiny : ww_dashSize == "Normal" ? size.normal : size.small
+
+// =============================================================================
+//  WONDERWHALES — CALCULATIONS (PSAR, VSA, EMAs, ATR, RSI, BB) (v1.1.4)
+// =============================================================================
+
+// --- Parabolic SAR ---
+ww_psar = ta.sar(ww_psarStart, ww_psarInc, psarMaxSafe)
+
+// Direction tracking: 1 = Bullish (SAR below price), -1 = Bearish (SAR above price)
+var int ww_sarDir = 0
+if not na(ww_psar)
+    ww_sarDir := ww_psar < close ? 1 : -1
+
+ww_sarBull = ww_sarDir == 1
+ww_sarBear = ww_sarDir == -1
+
+// Flip triggers: fire strictly on the transition bar
+ww_buyFlip  = ww_sarBull and ww_sarDir[1] == -1
+ww_sellFlip = ww_sarBear and ww_sarDir[1] == 1
+
+// --- Volume Spread Analysis (VSA) Engine ---
+ww_vol          = nz(volume)
+ww_volMa        = ta.sma(ww_vol, volMaLenSafe)
+ww_volCol       = f_vsaColor(ww_vol, ww_volMa, ww_volSpikeR, ww_volVeryHighR, ww_volHighR, ww_volNormalR, ww_volLowR)
+ww_volBucket    = f_vsaName(ww_vol, ww_volMa, ww_volSpikeR, ww_volVeryHighR, ww_volHighR, ww_volNormalR, ww_volLowR)
+ww_volRatio     = not na(ww_volMa) and ww_volMa > 0.0 ? ww_vol / ww_volMa : 0.0
+ww_isClimaxVol  = not na(ww_volMa) and ww_volMa > 0.0 and ww_vol >= ww_volMa * ww_volSpikeR
+ww_isHighVol    = not na(ww_volMa) and ww_volMa > 0.0 and ww_vol >= ww_volMa * ww_volHighR
+
+// --- Exponential Moving Averages ---
+ww_fastEma      = ta.ema(close, fastEmaSafe)
+ww_slowEma      = ta.ema(close, slowEmaSafe)
+ww_emaBull      = ww_fastEma > ww_slowEma
+ww_emaBear      = ww_fastEma < ww_slowEma
+ww_emaBuyCross  = ta.crossover(ww_fastEma, ww_slowEma)
+ww_emaSellCross = ta.crossunder(ww_fastEma, ww_slowEma)
+
+// 200 EMA Baseline
+ww_ema200       = ta.ema(close, ema200Safe)
+ww_aboveEma200  = close > ww_ema200
+
+// --- Average True Range & Percentage Volatility ---
+ww_atr          = ta.atr(atrLenSafe)
+ww_atrPct       = close > 0 and not na(ww_atr) ? (ww_atr / close) * 100.0 : 0.0
+ww_volatilityOk = ww_atrPct >= ww_minAtrPct
+
+// --- Relative Strength Index (RSI) ---
+ww_rsi           = ta.rsi(close, rsiLenSafe)
+ww_rsiOverbought = ww_rsi >= 70
+ww_rsiOversold   = ww_rsi <= 30
+ww_rsiBullish    = ww_rsi > 50
+
+// --- Bollinger Bands ---
+[ww_bbMid, ww_bbUpper, ww_bbLower] = ta.bb(close, bbLenSafe, ww_bbMult)
+
+// =============================================================================
+//  WONDERWHALES — SIGNAL LOGIC & FILTER GATES
+//  Pure signal structure: 100% preserved from original v1.0 specification
+// =============================================================================
+
+bool ww_rawBuy      = false
+bool ww_rawSell     = false
+bool ww_validBuy    = false
+bool ww_validSell   = false
+bool ww_blockedBuy  = false
+bool ww_blockedSell = false
+
+if ww_mode == "Parabolic SAR Reversal"
+    ww_rawBuy    := ww_buyFlip
+    ww_rawSell   := ww_sellFlip
+    ww_validBuy  := ww_rawBuy
+    ww_validSell := ww_rawSell
+
+else if ww_mode == "EMA Crossover"
+    ww_rawBuy    := ww_emaBuyCross
+    ww_rawSell   := ww_emaSellCross
+    ww_validBuy  := ww_rawBuy
+    ww_validSell := ww_rawSell
+
+else if ww_mode == "SAR + EMA Trend Filter"
+    ww_rawBuy      := ww_buyFlip
+    ww_rawSell     := ww_sellFlip
+    ww_validBuy    := ww_rawBuy and ww_emaBull
+    ww_validSell   := ww_rawSell and ww_emaBear
+    ww_blockedBuy  := ww_rawBuy and not ww_emaBull
+    ww_blockedSell := ww_rawSell and not ww_emaBear
+
+else if ww_mode == "SAR + EMA + ATR Filter"
+    ww_rawBuy      := ww_buyFlip
+    ww_rawSell     := ww_sellFlip
+    bool emaOkBuy  = ww_emaBull
+    bool emaOkSell = ww_emaBear
+    bool atrOk     = ww_volatilityOk
+    ww_validBuy    := ww_rawBuy and emaOkBuy and atrOk
+    ww_validSell   := ww_rawSell and emaOkSell and atrOk
+    ww_blockedBuy  := ww_rawBuy and not (emaOkBuy and atrOk)
+    ww_blockedSell := ww_rawSell and not (emaOkSell and atrOk)
+
+// Anti-repainting bar confirmation gate
+ww_barConfirmed = not ww_confirmOnClose or barstate.isconfirmed
+
+ww_signalBuy         = ww_validBuy and ww_barConfirmed
+ww_signalSell        = ww_validSell and ww_barConfirmed
+ww_signalBlockedBuy  = ww_blockedBuy and ww_barConfirmed
+ww_signalBlockedSell = ww_blockedSell and ww_barConfirmed
+
+// =============================================================================
+//  WONDERWHALES — VISUALS & RENDERING (v1.1.5)
+// =============================================================================
+
+// --- VSA Volume Bar Color (Default: ON) ---
+barcolor(ww_vsaBarColor ? ww_volCol : na, title = "VSA Bar Color")
+
+// --- VSA Climax Markers (Default: ON) ---
+plotshape(series = ww_vsaShowMarkers and ww_isClimaxVol, title = "VSA Climax Spike", style = shape.xcross, location = location.abovebar, color = color.fuchsia, size = size.tiny, force_overlay = true)
+
+// --- Parabolic SAR Dots (Overlay on Price Chart) ---
+plot(ww_showPsar ? ww_psar : na, title = "Parabolic SAR", color = ww_psarColor, style = plot.style_cross, linewidth = 2, force_overlay = true)
+
+// --- Signal & OHLC Status Line Outputs (Sync dynamic green/red/purple values on hover) ---
+plot(ww_signalBuy ? 1.0 : 0.0,  title = "BUY Status",  color = color.rgb(0, 255, 0), display = display.status_line, precision = 8)
+plot(ww_signalSell ? 1.0 : 0.0, title = "SELL Status", color = color.rgb(255, 0, 0), display = display.status_line, precision = 8)
+
+// --- Optional Fast / Slow EMA Lines (Overlay on Price Chart) ---
+plot(ww_showEma ? ww_fastEma : na, title = "Fast EMA", color = color.rgb(59, 130, 246), linewidth = 1, force_overlay = true)
+plot(ww_showEma ? ww_slowEma : na, title = "Slow EMA", color = color.rgb(249, 115, 22), linewidth = 1, force_overlay = true)
+
+// --- Secondary Indicator: 200 EMA Trend Baseline (Overlay on Price Chart) ---
+plot(ww_showEma200 ? ww_ema200 : na, title = "200 EMA Baseline", color = color.rgb(234, 179, 8), linewidth = 2, force_overlay = true)
+
+// --- Secondary Indicator: Bollinger Bands (Overlay on Price Chart) ---
+p_bbUpper = plot(ww_showBb ? ww_bbUpper : na, title = "BB Upper", color = color.new(color.teal, 30), linewidth = 1, force_overlay = true)
+plot(ww_showBb ? ww_bbMid : na,   title = "BB Basis", color = color.new(color.gray, 50), linewidth = 1, force_overlay = true)
+p_bbLower = plot(ww_showBb ? ww_bbLower : na, title = "BB Lower", color = color.new(color.teal, 30), linewidth = 1, force_overlay = true)
+fill(p_bbUpper, p_bbLower, color = ww_showBb ? color.new(color.teal, 95) : na, title = "BB Background")
+
+// --- Volume Overlay (VSA 6 Buckets + MA with format.volume) ---
+plot(ww_showVol ? ww_vol : na,     title = "VSA Volume", color = ww_volCol,                  style = plot.style_columns, format = format.volume)
+plot(ww_showVolMa ? ww_volMa : na, title = "Volume MA",  color = color.new(color.green, 0), linewidth = 1,              format = format.volume)
+
+// --- BUY Signals (Triangle - Compact Minimalist) ---
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangEn and ww_isSizeTiny,   title = "BUY Triangle (Tiny)",   style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.rgb(34, 197, 94), size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangEn and ww_isSizeSmall,  title = "BUY Triangle (Small)",  style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.rgb(34, 197, 94), size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangEn and ww_isSizeNormal, title = "BUY Triangle (Normal)", style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.rgb(34, 197, 94), size = size.normal, force_overlay = true)
+
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangCn and ww_isSizeTiny,   title = "买 Triangle (Tiny)",   style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.rgb(34, 197, 94), size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangCn and ww_isSizeSmall,  title = "买 Triangle (Small)",  style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.rgb(34, 197, 94), size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalBuy and ww_isLangCn and ww_isSizeNormal, title = "买 Triangle (Normal)", style = shape.triangleup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.rgb(34, 197, 94), size = size.normal, force_overlay = true)
+
+// --- SELL Signals (Triangle - Compact Minimalist) ---
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangEn and ww_isSizeTiny,   title = "SELL Triangle (Tiny)",   style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.rgb(239, 68, 68), size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangEn and ww_isSizeSmall,  title = "SELL Triangle (Small)",  style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.rgb(239, 68, 68), size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangEn and ww_isSizeNormal, title = "SELL Triangle (Normal)", style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.rgb(239, 68, 68), size = size.normal, force_overlay = true)
+
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangCn and ww_isSizeTiny,   title = "卖 Triangle (Tiny)",   style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.rgb(239, 68, 68), size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangCn and ww_isSizeSmall,  title = "卖 Triangle (Small)",  style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.rgb(239, 68, 68), size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleTriangle and ww_signalSell and ww_isLangCn and ww_isSizeNormal, title = "卖 Triangle (Normal)", style = shape.triangledown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.rgb(239, 68, 68), size = size.normal, force_overlay = true)
+
+// --- BUY Labels (Compact Label Box) ---
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangEn and ww_isSizeTiny,   title = "BUY Label (Tiny)",   style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.white, size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangEn and ww_isSizeSmall,  title = "BUY Label (Small)",  style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.white, size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangEn and ww_isSizeNormal, title = "BUY Label (Normal)", style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "BUY", textcolor = color.white, size = size.normal, force_overlay = true)
+
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangCn and ww_isSizeTiny,   title = "买 Label (Tiny)",   style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.white, size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangCn and ww_isSizeSmall,  title = "买 Label (Small)",  style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.white, size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalBuy and ww_isLangCn and ww_isSizeNormal, title = "买 Label (Normal)", style = shape.labelup, location = location.belowbar, color = color.rgb(34, 197, 94), text = "买",  textcolor = color.white, size = size.normal, force_overlay = true)
+
+// --- SELL Labels (Compact Label Box) ---
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangEn and ww_isSizeTiny,   title = "SELL Label (Tiny)",   style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.white, size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangEn and ww_isSizeSmall,  title = "SELL Label (Small)",  style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.white, size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangEn and ww_isSizeNormal, title = "SELL Label (Normal)", style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "SELL", textcolor = color.white, size = size.normal, force_overlay = true)
+
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangCn and ww_isSizeTiny,   title = "卖 Label (Tiny)",   style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.white, size = size.tiny,   force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangCn and ww_isSizeSmall,  title = "卖 Label (Small)",  style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.white, size = size.small,  force_overlay = true)
+plotshape(series = ww_showLabels and ww_isStyleLabel and ww_signalSell and ww_isLangCn and ww_isSizeNormal, title = "卖 Label (Normal)", style = shape.labeldown, location = location.abovebar, color = color.rgb(239, 68, 68), text = "卖",   textcolor = color.white, size = size.normal, force_overlay = true)
+
+// --- Blocked Signals (Debug) ---
+plotshape(series = ww_showDebug and ww_signalBlockedBuy,  title = "Blocked BUY (Debug)",  style = shape.diamond, location = location.belowbar, color = color.gray, size = size.tiny, force_overlay = true)
+plotshape(series = ww_showDebug and ww_signalBlockedSell, title = "Blocked SELL (Debug)", style = shape.diamond, location = location.abovebar, color = color.gray, size = size.tiny, force_overlay = true)
+
+// =============================================================================
+//  WONDERWHALES — HUD DASHBOARD TABLE (v1.1.3)
+// =============================================================================
+
+var table ww_hud = na
+
+if barstate.islast and ww_showDash
+    if na(ww_hud)
+        ww_hud := table.new(ww_tablePos, 2, 7, bgcolor = color.new(#131722, 15), border_color = color.new(color.gray, 60), border_width = 1, force_overlay = true)
+    
+    // Header
+    table.cell(ww_hud, 0, 0, "WONDERWHALES", text_color = color.white, bgcolor = color.new(#2962ff, 30), text_size = ww_tableTextSize)
+    table.cell(ww_hud, 1, 0, "HUD v1.1",     text_color = color.yellow, bgcolor = color.new(#2962ff, 30), text_size = ww_tableTextSize)
+
+    // Row 1: PSAR Trend
+    table.cell(ww_hud, 0, 1, "PSAR Trend", text_color = color.gray, text_size = ww_tableTextSize)
+    string psarTxt = ww_sarBull ? "BULLISH ▲" : "BEARISH ▼"
+    color  psarClr = ww_sarBull ? color.rgb(34, 197, 94) : color.rgb(239, 68, 68)
+    table.cell(ww_hud, 1, 1, psarTxt, text_color = psarClr, text_size = ww_tableTextSize)
+
+    // Row 2: VSA Volume Bucket
+    table.cell(ww_hud, 0, 2, "VSA Volume", text_color = color.gray, text_size = ww_tableTextSize)
+    string volTxt = ww_volBucket + " (" + str.tostring(ww_volRatio, "#.##") + "x)"
+    table.cell(ww_hud, 1, 2, volTxt, text_color = ww_volCol, text_size = ww_tableTextSize)
+
+    // Row 3: RSI Momentum
+    table.cell(ww_hud, 0, 3, "RSI (14)", text_color = color.gray, text_size = ww_tableTextSize)
+    string rsiStatus = ww_rsiOverbought ? " (OB)" : ww_rsiOversold ? " (OS)" : " (Neutral)"
+    color  rsiClr    = ww_rsiOverbought ? color.rgb(239, 68, 68) : ww_rsiOversold ? color.rgb(34, 197, 94) : color.white
+    table.cell(ww_hud, 1, 3, str.tostring(ww_rsi, "#.#") + rsiStatus, text_color = rsiClr, text_size = ww_tableTextSize)
+
+    // Row 4: EMA Trend (20 / 50)
+    table.cell(ww_hud, 0, 4, "EMA (20/50)", text_color = color.gray, text_size = ww_tableTextSize)
+    string emaTxt = ww_emaBull ? "BULLISH (20 > 50)" : "BEARISH (20 < 50)"
+    color  emaClr = ww_emaBull ? color.rgb(34, 197, 94) : color.rgb(239, 68, 68)
+    table.cell(ww_hud, 1, 4, emaTxt, text_color = emaClr, text_size = ww_tableTextSize)
+
+    // Row 5: ATR Volatility %
+    table.cell(ww_hud, 0, 5, "ATR %", text_color = color.gray, text_size = ww_tableTextSize)
+    string atrTxt = str.tostring(ww_atrPct, "#.##") + "%" + (ww_volatilityOk ? " (Active)" : " (Chop)")
+    color  atrClr = ww_volatilityOk ? color.white : color.gray
+    table.cell(ww_hud, 1, 5, atrTxt, text_color = atrClr, text_size = ww_tableTextSize)
+
+    // Row 6: 200 EMA Baseline
+    table.cell(ww_hud, 0, 6, "200 EMA", text_color = color.gray, text_size = ww_tableTextSize)
+    string ema200Txt = ww_aboveEma200 ? "Above (Bullish Bias)" : "Below (Bearish Bias)"
+    color  ema200Clr = ww_aboveEma200 ? color.rgb(34, 197, 94) : color.rgb(239, 68, 68)
+    table.cell(ww_hud, 1, 6, ema200Txt, text_color = ema200Clr, text_size = ww_tableTextSize)
+
+// =============================================================================
+//  WONDERWHALES — ALERTS & NOTIFICATIONS
+// =============================================================================
+
+// Dedicated alertcondition hooks for TradingView Create Alert dialog (Indicator only)
+alertcondition(ww_signalBuy,  title = "Wonderwhales BUY",  message = "Wonderwhales BUY | {{exchange}}:{{ticker}} | TF={{interval}} | Close={{close}}")
+alertcondition(ww_signalSell, title = "Wonderwhales SELL", message = "Wonderwhales SELL | {{exchange}}:{{ticker}} | TF={{interval}} | Close={{close}}")
+alertcondition(ww_signalBuy or ww_signalSell, title = "Wonderwhales Any Signal", message = "Wonderwhales Signal | {{exchange}}:{{ticker}} | TF={{interval}} | Close={{close}}")
+
+// Optional display alert: VSA Climax Volume Spike
+alertcondition(ww_isClimaxVol, title = "Wonderwhales VSA Climax", message = "Wonderwhales VSA Climax (Purple) | {{exchange}}:{{ticker}} | Vol={{volume}}")
+
+// Runtime alert() calls
+if ww_signalBuy
+    alert("Wonderwhales BUY | " + syminfo.ticker + " | TF=" + timeframe.period + " | Close=" + str.tostring(close), alert.freq_once_per_bar_close)
+if ww_signalSell
+    alert("Wonderwhales SELL | " + syminfo.ticker + " | TF=" + timeframe.period + " | Close=" + str.tostring(close), alert.freq_once_per_bar_close)
+
+// =============================================================================
+//  AUTO-GENERATED - DO NOT EDIT
+//  Target : wonderwhales
+//  Version: 1.2.0
+//  Source : pine/parts*/ + pine/shared/*.pine   ->   node tools/build.mjs
+//  Built  : 2026-11-15T15:20:39.767Z
+// =============================================================================

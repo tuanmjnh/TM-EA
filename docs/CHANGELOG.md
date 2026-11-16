@@ -5,6 +5,127 @@
 ---
 
 ```yaml
+[2026-11-16] - v4.3 (LIQUIDITY SWEEP REVERSAL)
+Thay doi: build TM_SweepReversal.mq5 (bar dong pha swing roi dong lai vao trong -> dao chieu; SL ngoai
+  dinh/day quet; trail ATR; loc HTF EMA; risk; ><). Compile 0/0. Runner tests/run_sweep.ps1.
+Ket qua (1 nam real-tick XAUUSDm):
+  - M5 + HTF: 1556 lenh, PF 0.895, DD 76.5%.
+  - M5 no HTF: 3108 lenh, PF 0.885, DD 91.3%.
+  - M15 + HTF: 403 lenh, PF 0.845, DD 48.7%.
+Quyet dinh: entry sweep + SL ngoai quet + trail VAN khong co edge (PF < 1, DD rat lon). Chi tiet: EA_BUILD_PLAN.md.
+
+[2026-11-16] - v4.2 (WONDERWHALES + TRAILING/BREAKEVEN)
+Thay doi: them trailing ATR + breakeven (gate ATR) vao TM_Wonderwhales (theo yeu cau). Compile 0/0.
+Ket qua (XAUUSDm M5, 1 nam, PSAR/EMA):
+  - PSAR one+trail: PF 0.978, DD 66.7% (3717 lenh).
+  - PSAR one+trail+BE: PF 0.966, DD 71.0%.
+  - EMA one+trail: PF 0.930, DD 24.4%.
+  - PSAR wide-trail (act2/mult3): PF 0.952, DD 80.7%.
+  - PSAR SL=PSAR + trail: PF 0.861, DD 39.6%.
+Quyet dinh: trailing/breakeven KHONG cuu duoc WW M5 (PF < 1, DD rat lon). Tin hieu WW nhin "dep" tren
+  TradingView la do hindsight/repaint + khong tinh spread. Chi tiet: docs/EA/EA_BUILD_PLAN.md.
+
+[2026-11-16] - v4.1 (ORB - OPENING RANGE BREAKOUT)
+Thay doi: dung lai engine SB cho ORB (pha range gio mo cua London/NY), khong code moi.
+Ket qua (XAUUSDm, RR3, ADX off):
+  - ORB L M5   1Y: PF 1.164, DD 17.8%, 208 lenh.
+  - ORB L M15  1Y: PF 1.198, DD 14.2%; 3Y PF 1.039, DD 22.7% (W1 1.049, W2 0.981).
+  - ORB L M5   3Y: PF 1.151, DD 12.4%, 563 lenh (~5x SB).
+Quyet dinh: ORB la huong tan suat cao "it te nhat" nhung PF ~1.04-1.15 < nguong 1.3 va kem hon SB.
+  Chi tiet: docs/EA/EA_BUILD_PLAN.md.
+
+[2026-11-16] - v4.0 (SCALP NHANH LIEN TUC - NGHIEN CUU)
+Thay doi: build TM_MeanRevert.mq5 (BB20/2 + RSI + loc range ADX, M5) de thu huong MR scalping.
+Ket qua (1 nam real-tick):
+  - EURUSDm: 816 lenh, PF 0.648, DD 86.8%.
+  - XAUUSDm: 767 lenh, PF 0.855, DD 53.7%.
+  - EURUSDm (khong loc range): 1961 lenh, PF 0.655, DD 97.8%.
+Quyet dinh: khong bot nao phu hop scalp nhanh lien tuc (trend/breakout/MR deu PF<1, DD cuc lon).
+  Chi SB (1 lenh/ngay) co edge. Chi tiet: docs/EA/EA_BUILD_PLAN.md (3.3).
+
+[2026-11-16] - v3.9 (SB HOAN THIEN: SET + FORWARD PLAN)
+Thay doi:
+  - Cap nhat config/sets/TM_SessionBreakout/ theo EA hien tai: TM_SB_XAUUSD_H1_BASELINE_v1_0.set
+    (them Use_Session2=false, day du input) + them TM_SB_XAUUSD_H1_CENT_v1_0.set (tai khoan Cent).
+  - Them docs/FORWARD_DEMO_PLAN.md (cau hinh dong bang, lai kep, giam sat, tieu chi dung/dat).
+  - Them reports/forward/TM_SessionBreakout/_template.md.
+Quyet dinh: SB dong bang H1 baseline; buoc tiep = forward demo Cent 2-4 tuan. Khong doi tham so.
+  Chi tiet: docs/FORWARD_DEMO_PLAN.md, config/sets/README.md.
+
+[2026-11-16] - v3.8 (TANG TAN SUAT - KET QUA)
+Thay doi: them phien 2 cho TM_SessionBreakout (Use_Session2). Compile 0/0.
+Ket qua (XAUUSDm 3Y):
+  - 1 phien: 111 lenh, PF 1.666, DD 7.9 (chuan).
+  - 2 phien: 175 lenh (+58%), PF 0.941, DD 28.3 -> TE HON.
+  - M5: 138 lenh PF 1.058 DD 17; EURCADm PF 0.391 DD 48; USDCADm PF 0.957.
+Quyet dinh: moi cach tang tan suat deu pha edge. Edge SB cu the = 1 lenh/ngay (range A -> LDN/NY) tren XAUUSDm.
+  Chi tiet: reports/backtests/TM_SessionBreakout/SB_RESEARCH.md (3g).
+
+[2026-11-16] - v3.7 (P2 - SCOPE TRENDLINE BOLLINGER)
+Thay doi: xay TM_ScopeTB.mq5 (bias D1+H1, BB M5 + trendline, ATR trail, no TP, re-entry). Compile 0/0.
+Them runner tests/run_stb.ps1; report reports/backtests/TM_ScopeTB/.
+Ket qua (XAUUSDm M5, 1 nam):
+  - Session ON: 554 lenh, PF 0.954, DD 33.5%.
+  - Session OFF: 950 lenh, PF 1.000, DD 30.5%.
+Quyet dinh: STB ban dau KHONG dat gate (PF ~1.0, DD cao). Chua toi uu them. Khong co edge ro.
+  Chi tiet: docs/EA/EA_BUILD_PLAN.md (4.1).
+
+[2026-11-16] - v3.6 (P1 KET LUAN)
+Thay doi: sua parity PSAR (tu tinh theo Pine, ham WwPSAR) trong TM_Wonderwhales.
+Ket qua (XAUUSDm):
+  - PSAR flip: 24 -> hang tram tin hieu/nam (da sua).
+  - H1 PSAR close-and-reverse SL=PSAR: 1 nam PF 1.554/DD 4.19%, NHUNG walk-forward
+    W1 0.943 / W2 0.709 / W3 1.554 -> 3Y PF 0.942 (AM).
+Quyet dinh: Wonderwhales KHONG co edge ben vung -> dung toi uu, chuyen P2 (Scope Trendline Bollinger).
+
+[2026-11-16] - v3.5 (EA BUILD PLAN + WONDERWHALES P1)
+Thay đổi:
+  - Them docs/EA/EA_BUILD_PLAN.md: ke hoach xay dung & backtest 3 EA moi (Wonderwhales,
+    Scope Trendline Bollinger, TM Indicator 2), uu tien P1->P3.
+  - Xay TM_Wonderwhales.mq5 (port PSAR/EMA/ATR, signal-only mac dinh). Compile 0/0.
+  - Them runner tests/run_ww.ps1; report reports/backtests/TM_Wonderwhales/.
+Ket qua dau (XAUUSDm M15, 1 nam real-tick, SL ATR2, TP RR2, risk 1%, dep5000):
+  - mode EMA_CROSSOVER (close-and-reverse, no TP): 343 lenh, PF 1.069, DD 32.7%.
+  - mode PSAR_REVERSAL: chi 24 tin hieu/nam -> LOI parity PSAR (iSAR vs Pine), can sua.
+  - SAR+EMA / SAR+EMA+ATR: gan nhu khong co lenh (do PSAR hong).
+Quyet dinh:
+  - P1 chua cho ket qua tot hon SB; uu tien sua parity PSAR + thu EMA mode tren TF khac.
+    Chi tiet: docs/EA/EA_BUILD_PLAN.md.
+
+[2026-11-15] - v3.4 (SB: TF input, SL bug fix, sets, folders)
+Thay đổi (code):
+  - TM_SessionBreakout: them input Entry_TF (chay M15/M30/H1); SUA BUG SL_Range_Fraction
+    (truoc do neo SL theo entry -> frac=1.0 bi chat hon bien range -> PF sup 0.997;
+    nay neo vao bien range -> frac=1.0 = PF 1.666). EX5=6056689F0723FDA8, compile 0/0.
+  - Tao preset config/sets/TM_SessionBreakout/ (H1 baseline, M30, M15).
+Thay đổi (cau truc):
+  - config/sets/ chia theo EA: TM_TrendFollowerScalper/, TM_SessionBreakout/, TM_KimLa/.
+  - config/ini/ : copy 49 ini tu MT5 (Profiles\Tester) + 5 ini du an, nhom theo EA.
+Ket qua (XAU 3Y, SL dung):
+  - H1 1/ngay PF 1.666/DD7.9 (tot nhat); M30 1.456; M15 1.217.
+  - NHEU lenh/ngay -> TE hon (H1 0.964). Khung nho khong them lenh.
+Quyet dinh:
+  - Chot H1 (frac1.0, ADX20, RR5, 1/ngay). Bang frac cu (1.25 "tot") bi BAC BO (la he qua cua bug).
+  - Chi tiet: reports/backtests/TM_SessionBreakout/SB_RESEARCH.md (3f).
+
+[2026-11-13] - v3.3 (XAU-FOCUSED OPTIMIZATION)
+Thay đổi (code): them input SL_Range_Fraction (SL = frac * range; mac dinh 1.0). EX5=B3FC4346827A04FB.
+Ket qua (XAUUSDm 3Y):
+  - Cua so: London 07-12 PF 0.775 (te); NY 12-20 PF 1.771 nhung walk-forward khong thang deu -> giu 07-20.
+  - SL frac: 0.5->0.973 (DD40%), 1.25->1.778 nhung RR4/5/6=1.084/1.778/1.405 = DINH GIA (overfit);
+    1.0 giu plateau RR4-6 = 1.445/1.665/1.680.
+Quyet dinh:
+  - Cam bay overfit duoc nhan dien va TU CHOI (frac1.25, NY window). GIU cau hinh ben: frac1.0, ADX20, RR5.
+  - Cau hinh chot cho XAU. Chi tiet: _sb/SB_RESEARCH.md (3f).
+
+[2026-11-13] - v3.2 (SB ROBUSTNESS)
+Thay đổi: khong doi code chien luoc (chi test).
+Kiem chung:
+  - Do nhay commission (giai tich): PF 1.665 -> 1.459 tai $5/lenh, 1.299 tai $10/lenh -> RAT BEN voi phi.
+  - Dai range theo ATR (Min/Max_Range_ATR): loc range lon LAM GIAM PF (1.665 -> 1.394) -> khong dung.
+  - Symbol raw XAUUSDr khong test duoc (thieu history) -> commission model truc tiep BLOCKED.
+Quyet dinh: Giu cau hinh ADX20 RR5. Ket qua khong doi. Chi tiet: _sb/SB_RESEARCH.md (3d/3e).
+
 [2026-11-13] - v3.1 (SB REGIME FILTER - KET QUA TOT NHAT)
 Thay đổi (code):
   - TM_SessionBreakout: them bo loc regime ADX(H1) (Use_ADX_Filter mac dinh true, ADX_Min=20),

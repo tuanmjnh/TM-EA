@@ -19,10 +19,11 @@ TM-EA/
 │   ├── SOURCE_SPEC_V1.md        # Single source of truth for strategy requirements
 │   └── archive/v1/              # Superseded documents, read-only history
 ├── MQL5/
-│   ├── Experts/                 # EA main file (.mq5) and compiled binary (.ex5)
+│   ├── Experts/                 # EA main files: TM_TrendFollowerScalper, TM_SessionBreakout (.mq5/.ex5)
 │   └── Include/TM_EA/           # Modular EA components (.mqh)
 ├── config/
-│   └── sets/                    # Versioned MT5 input presets (.set)
+│   ├── sets/                    # Versioned MT5 presets (.set), per EA: sets/<EA>/
+│   └── ini/                     # MT5 Strategy Tester configs (.ini), per EA: ini/<EA>/
 ├── reports/
 │   ├── backtests/               # MT5 Strategy Tester reports and HTML exports
 │   └── forward/                 # Demo forward-test reports

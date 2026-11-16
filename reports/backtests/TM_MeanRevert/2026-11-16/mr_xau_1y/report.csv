@@ -1,0 +1,18 @@
+key;value
+symbol;XAUUSDm
+expert;TM_MeanRevert
+end_time;2026.10.30 20:57:59
+deposit;5000.00
+final_balance;2966.00
+net_profit;-2034.00
+gross_profit;11973.37
+gross_loss;-14007.37
+profit_factor;0.855
+trades;767
+wins;363
+losses;404
+largest_win;163.46
+largest_loss;-234.70
+max_consec_losses;12
+max_equity_dd_abs;2907.97
+max_equity_dd_pct;53.706

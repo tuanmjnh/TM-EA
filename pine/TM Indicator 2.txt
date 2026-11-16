@@ -1,0 +1,2243 @@
+//@version=6
+indicator("TM Indicator 2", shorttitle = "TM·IND2", overlay = false, dynamic_requests = true, max_boxes_count = 500, max_lines_count = 500, max_labels_count = 500, max_bars_back = 1000)
+// =============================================================================
+//  SHARED HELPERS - code dung chung MOI target (chen qua marker SHARED trong 00_header)
+//  - f_sessionOk : loc phien giao dich (dung cho XAU/XAG/forex, crypto de trong)
+//  - f_vsaColor  : 6 mau bucket volume VSA - TIM = volume dot bien (vol >= ma * rP)
+//  - f_vsaName   : ten bucket tuong ung, dung cho dashboard
+//  Quy uoc: ham f_* thuan (khong phu thuoc input) - dua vao day de cac
+//  indicator moi (TM Signals, TM VSA Wyckoff, ...) dung lai mot lan dinh nghia.
+// =============================================================================
+
+f_sessionOk(string sess, string tz) =>
+    not na(time(timeframe.period, sess, tz))
+
+f_vsaColor(float vol, float ma, float rP, float rVH, float rH, float rN, float rL) =>
+    vol >= ma * rP ? color.purple : vol >= ma * rVH ? color.red : vol >= ma * rH ? color.orange : vol >= ma * rN ? color.green : vol >= ma * rL ? color.blue : color.silver
+
+f_vsaName(float vol, float ma, float rP, float rVH, float rH, float rN, float rL) =>
+    vol >= ma * rP ? "TIM" : vol >= ma * rVH ? "VeryHigh" : vol >= ma * rH ? "High" : vol >= ma * rN ? "Normal" : vol >= ma * rL ? "Low" : "VeryLow"
+
+// --- Pure math / formatting (truoc do copy 3 ban trong parts/, parts-xau/, parts-xau2/) ---
+f_clamp(float v, float lo, float hi) =>
+    math.max(lo, math.min(hi, v))
+
+f_fmtPx(float p) =>
+    str.tostring(p, format.mintick)
+
+f_isNewDay() =>
+    ta.change(time("D")) != 0
+
+// --- Alert JSON helpers (truoc do copy trong parts/70_alerts + xau/90 + xau2/99) ---
+// CANH BAO: str.format_time(time, format, timezone) - `time` (series int) di TRUOC.
+// Dau tien la UNIX timestamp, thu hai moi la chuoi format. Dao nguoc -> CE10123
+// "argument of literal string type was used but a series int is expected".
+f_ts() =>
+    str.format_time(time, "yyyy-MM-dd'T'HH:mm:ss'Z'", "UTC")
+
+f_sym() =>
+    str.replace_all(syminfo.ticker, "\\", "/")
+
+// --- Session windows - chuan 5 ban (parts/vsa/sweep/xau/xau2 dashboard) ---
+//  Asia 1700-0200 / London 0200-1000 / NY 0700-1500 (moc gio NY, xem docs/time-rules.md)
+f_sessAsia(string tz) =>
+    not na(time(timeframe.period, "1700-0200", tz))
+
+f_sessLondon(string tz) =>
+    not na(time(timeframe.period, "0200-1000", tz))
+
+f_sessNy(string tz) =>
+    not na(time(timeframe.period, "0700-1500", tz))
+
+f_sessName(bool asia, bool london, bool ny) =>
+    london and ny ? "London/NY" : ny ? "New York" : london ? "London" : asia ? "Asia" : "-"
+
+// =============================================================================
+//  S/R ZONE ENGINE - dung chung parts-xau + parts-xau2
+//  Pivot-based supply/demand zones, ATR width, zone merging, max limit.
+//  Truoc do copy 2 ban (SrZone/xau_* vs X2SrZone/x2_*) - gop thanh 1.
+//  Bien mang dung chung `sr_zones` (moi dist la 1 script doc lap nen khong xung dot);
+//  ham nhan mang + ATR/width/maxZone lam tham so (khong tham khao bien toan cuc
+//  vi shared duoc chen TRUOC 10_config/20_core).
+// =============================================================================
+
+type SrZone
+    float top
+    float bot
+    int   side      // 1=support, -1=resistance
+    int   touches
+    bool  broken
+
+var array<SrZone> sr_zones = array.new<SrZone>()
+
+f_addZone(array<SrZone> zones, float px, int side, float atr, float width, int maxZone) =>
+    float half   = atr * width * 0.5
+    bool  merged = false
+    for z in zones
+        if math.abs((z.top + z.bot) / 2 - px) < atr * width
+            z.touches += 1
+            merged     := true
+            break
+    if not merged
+        array.push(zones, SrZone.new(px + half, px - half, side, 1, false))
+    for i = array.size(zones) - 1 to 0
+        SrZone z2 = array.get(zones, i)
+        if z2.broken
+            array.remove(zones, i)
+    while array.size(zones) > maxZone
+        array.shift(zones)
+
+f_nearSupport(array<SrZone> zones, float atr) =>
+    bool found = false
+    for z in zones
+        if not z.broken and z.side == 1 and low >= z.bot - atr * 0.3 and low <= z.top + atr * 0.3
+            found := true
+    found
+
+f_nearResistance(array<SrZone> zones, float atr) =>
+    bool found = false
+    for z in zones
+        if not z.broken and z.side == -1 and high >= z.bot - atr * 0.3 and high <= z.top + atr * 0.3
+            found := true
+    found
+
+// =============================================================================
+//  SHARED SIGNAL QUALITY PRIMITIVES - used by pine/parts-tm2 (TM Indicator 2)
+//  Every helper here is PURE: no reference to inputs or globals, because the
+//  SHARED block is inserted before 01_inputs_*.pine. This is the single source of
+//  truth for the v2.1 direction-aware scoring contract:
+//
+//    * direction and strength are separate values;
+//    * LONG and SHORT scores use the same 0..100 scale and the same thresholds;
+//    * a signed feature f in [-1, 1] contributes max(f, 0) to LONG and
+//      max(-f, 0) to SHORT, so the two sides are mathematically symmetric;
+//    * gate/risk failures are reason codes, never score compensation.
+// =============================================================================
+
+f_tmClamp(float v, float lo, float hi) =>
+    math.max(lo, math.min(hi, v))
+
+// Directional support of a signed feature: one side gets the magnitude, the
+// other gets 0. No sign flipping, no negative quality score.
+f_tmLongPart(float v) =>
+    math.max(v, 0.0)
+
+f_tmShortPart(float v) =>
+    math.max(-v, 0.0)
+
+// Aggregate one side to 0..100. `weighted` is the sum of w * directional part,
+// `totalWeight` the sum of all directional weights actually enabled.
+f_tmSideScore(float weighted, float totalWeight) =>
+    totalWeight > 0.0 ? math.round(100.0 * f_tmClamp(weighted / totalWeight, 0.0, 1.0)) : 0
+
+// 0 = NO TRADE, 1 = WEAK, 2 = SETUP, 3 = STRONG, 4 = A+
+f_tmScoreLevel(int score, int noTrade, int weak, int setup, int strong) =>
+    score <= noTrade ? 0 : score <= weak ? 1 : score <= setup ? 2 : score <= strong ? 3 : 4
+
+f_tmLevelName(int level) =>
+    switch level
+        1 => "WEAK"
+        2 => "SETUP"
+        3 => "STRONG"
+        4 => "A+"
+        => "NO TRADE"
+
+// Minimum required level from the quality input string.
+f_tmMinLevel(string quality) =>
+    switch quality
+        "WEAK" => 1
+        "SETUP" => 2
+        "STRONG" => 3
+        "A+" => 4
+        => 0
+
+// Lifecycle status for the dashboard. `stage` uses the TM2_* ints from
+// 02_types_and_state_defs.pine (0 IDLE, 1 PENDING_LIMIT, 2+ OPEN).
+f_tmLiveStatus(bool signal, int stage, string reason) =>
+    signal ? "SIGNAL" : stage == 1 ? "PENDING_LIMIT" : stage >= 2 ? "OPEN" : reason == "OK" ? "NO_SETUP" : reason == "WAIT_PULLBACK" ? "WAIT_PULLBACK" : reason == "WAIT_CONFIRMATION" ? "WAIT_CONFIRMATION" : reason == "NO_DIRECTION" ? "NO_DIRECTION" : reason == "AMBIGUOUS_SETUP" ? "AMBIGUOUS_SETUP" : "BLOCKED"
+
+// Short, readable label for the reason codes standardized in the v2.1 roadmap.
+f_tmReasonLabel(string code) =>
+    switch code
+        "OK" => "OK"
+        "NO_SETUP" => "No setup"
+        "NO_DIRECTION" => "No direction"
+        "AMBIGUOUS_SETUP" => "Ambiguous setup"
+        "WAIT_CONFIRMATION" => "Wait confirmation"
+        "WAIT_PULLBACK" => "Wait pullback"
+        "BLOCKED_SCORE_LONG" => "Blocked: score (LONG)"
+        "BLOCKED_SCORE_SHORT" => "Blocked: score (SHORT)"
+        "BLOCKED_MTF" => "Blocked: HTF"
+        "BLOCKED_REGIME" => "Blocked: regime"
+        "BLOCKED_LIQUIDITY" => "Blocked: liquidity"
+        "BLOCKED_OBSTACLE" => "Blocked: obstacle"
+        "BLOCKED_OVEREXTENSION" => "Blocked: overextension"
+        "BLOCKED_NO_ATR" => "Blocked: ATR"
+        "BLOCKED_BAD_SL" => "Blocked: SL"
+        "BLOCKED_BAD_TP" => "Blocked: TP"
+        "BLOCKED_RR" => "Blocked: RR (TP2)"
+        "BLOCKED_NET_RR" => "Blocked: net RR"
+        "BLOCKED_MAX_LEV" => "Blocked: max leverage"
+        "BLOCKED_LIQUIDATION_RISK" => "Blocked: liquidation"
+        "BLOCKED_COOLDOWN" => "Blocked: cooldown"
+        "BLOCKED_DAILY_LIMIT" => "Blocked: daily limit"
+        "BLOCKED_CIRCUIT_BREAKER" => "Blocked: circuit breaker"
+        "BLOCKED_POSITION_OPEN" => "Blocked: position open"
+        "BTC_DUMPING_VETO" => "Blocked: BTC dumping"
+        "BTC_PUMPING_VETO" => "Blocked: BTC pumping"
+        "MODE_DISABLED" => "Mode disabled"
+        "MODE_REGIME_MISMATCH" => "Mode: regime mismatch"
+        "MODE_INVALIDATED" => "Mode invalidated"
+        "MODE_A_PULLBACK" => "Mode A: trend pullback"
+        "MODE_B_SWEEP" => "Mode B: sweep reversal"
+        "MODE_C_RANGE" => "Mode C: range reversion"
+        => code
+
+// Accumulate blocker codes without duplicate separators.
+f_tmBlockers(string current, string add) =>
+    add == "" or add == "OK" ? current : current == "" ? add : current + "," + add
+
+// =============================================================================
+//  TM INDICATOR 2 & STRATEGY LAB 2  -  v2.1.0
+//  Next-Gen Multi-Asset Quantitative Trading & Analysis System
+//  Architecture: Modular Build (tools/build.mjs) -> pine/dist/
+//
+//  Key Architectural Pillars (Roadmap v2):
+//    1. Dynamic Trade Management: Auto Break-Even @ TP1, Trailing Stop @ TP2,
+//       Time-Decay / Stagnation Exit.
+//    2. Smart Entry Execution: Market on Confirm vs Pullback Limit Entry
+//       (50% FVG / Order Block Edge / EMA Fast) with auto-cancellation after K bars.
+//    3. Market Regime Classifier: Real-time detection of TRENDING, RANGING,
+//       and CHOPPY / SQUEEZE with dynamic regime-adaptive scoring weights.
+//    4. Room-to-Left / HTF Obstacle Gate: Checks distance to opposing structural
+//       barriers (S/R, OB) before entry; blocks trades if Obstacle < TP1.
+//    5. Anti-Overextension Gate: Detects price exhaustion (Extension > Max ATR
+//       or Candle Spread > 2.5x ATR) and forces pullback limit entry.
+//    6. Inter-Market & Session Intelligence: BTC Leader Filter for ETH/Altcoins,
+//       Crypto Weekend Low-Liquidity Filter, and MTF Hierarchy validation.
+//    7. Pine v6 Tuple MTF & Memory Optimization: Zero-repaint tuple requests,
+//       strictly capped under 5 request.security() calls, with drawing GC.
+//
+//  v2.1 additions (validation-first, no performance claim without OOS data):
+//    8. Direction-aware scoring: independent LONG/SHORT 0..100 side scores from
+//       the same weights, a minimum side score and a direction margin. The old
+//       signed quality score blocked SHORT by construction and is gone.
+//    9. Entry modes by market state: A Trend Pullback, B Liquidity Sweep
+//       Reversal, C Range Mean-Reversion (opt-in), each with activation,
+//       confirmation, invalidation and expiry.
+//   10. Reason-code telemetry: every blocker emits a standardized code, the
+//       dashboard shows the top reason plus the full blocker mask, and alerts
+//       carry the scores/side/status/mode that produced the signal.
+//   11. Dashboard Compact (default) / Advanced modes + lifecycle funnel
+//       (candidate -> eligible -> pending -> filled -> closed).
+//
+//  Verification Standard:
+//    - TP1 Hit Rate (%) and Net Trade Winrate (%) separated on the dashboard.
+//    - WINRATE IS NOT A CLAIM: any improvement needs the ablation/walk-forward
+//      protocol and an out-of-sample report (docs/indicator/tm-indicator-2/).
+// =============================================================================
+
+// =============================================================================
+//  L0 - INPUTS & ASSET PROFILES (TM Indicator 2 - Next-Gen Architecture)
+// =============================================================================
+
+// --- 1. General & Mode --------------------------------------------------------
+tm_confirmOnly = input.bool(true,  "Chi tin hieu nen da dong (no-repaint)", group = "TM · Chung", display = display.data_window)
+tm_payloadMode = input.string("Full", "Webhook payload", options = ["Full", "Slim", "Off"], group = "TM · Chung", display = display.data_window)
+
+// --- 2. Asset Profile & Inter-market -----------------------------------------
+tm_assetMode            = input.string("Auto", "Asset Profile", options = ["Auto", "XAU", "BTC", "ETH", "Liquid Altcoin", "High-Risk Altcoin", "Custom"], group = "TM · Asset Profile", display = display.data_window)
+tm_cryptoSessionNeutral = input.bool(true, "Crypto 24/7: Session neutral", group = "TM · Asset Profile", display = display.data_window)
+tm_minVolCheck          = input.bool(true, "Kiem tra thanh khoan toi thieu", group = "TM · Asset Profile", display = display.data_window)
+tm_weekendFilter        = input.bool(true, "Weekend Low-Liquidity Filter (Crypto)", group = "TM · Asset Profile", display = display.data_window)
+tm_btcLeaderOn          = input.bool(true, "BTC Leader Filter (cho ETH/Altcoin)", group = "TM · Asset Profile", display = display.data_window)
+tm_btcTicker            = input.symbol("BINANCE:BTCUSDT.P", "BTC Leader Ticker", group = "TM · Asset Profile", display = display.data_window)
+tm_btcImpulseAtr        = input.float(1.5, "BTC Impulse Filter (x ATR)", minval = 0.5, step = 0.1, group = "TM · Asset Profile", display = display.data_window)
+
+// --- 3. Smart Execution Mode (Market vs Pullback Limit) ----------------------
+tm_entryMode        = input.string("Auto (Adaptive)", "Che do vao lenh", options = ["Market on Confirm", "Pullback Limit (Strict)", "Auto (Adaptive)"], group = "TM · Smart Entry Execution", display = display.data_window)
+tm_limitSource      = input.string("50% FVG", "Vi tri dat Limit", options = ["50% FVG", "Order Block Edge", "EMA Fast Pullback"], group = "TM · Smart Entry Execution", display = display.data_window)
+tm_limitCancelBars  = input.int(5, "Huy Limit sau K nen khong khop", minval = 1, maxval = 20, group = "TM · Smart Entry Execution", display = display.data_window)
+tm_limitCancelOnTp1 = input.bool(true, "Huy Limit neu gia da cham TP1 truoc", group = "TM · Smart Entry Execution", display = display.data_window)
+
+// --- 3b. Entry Modes by Market State (v2.1 Phase 3) --------------------------
+tm_modeFilterOn  = input.bool(true,  "Require an active entry mode (A/B/C)", group = "TM · Entry Modes", display = display.data_window)
+tm_modeA_on      = input.bool(true,  "Mode A: Trend Pullback", group = "TM · Entry Modes", display = display.data_window)
+tm_modeB_on      = input.bool(true,  "Mode B: Liquidity Sweep Reversal", group = "TM · Entry Modes", display = display.data_window)
+tm_modeC_on      = input.bool(false, "Mode C: Range Mean-Reversion", group = "TM · Entry Modes", display = display.data_window)
+tm_modeSweepBars = input.int(3, "Mode B confirmation window (bars)", minval = 1, maxval = 20, group = "TM · Entry Modes", display = display.data_window)
+tm_modePullTol   = input.float(0.35, "Mode A pullback tolerance (x ATR)", minval = 0.05, step = 0.05, group = "TM · Entry Modes", display = display.data_window)
+tm_modeRangeTol  = input.float(0.35, "Mode C range-edge tolerance (x ATR)", minval = 0.05, step = 0.05, group = "TM · Entry Modes", display = display.data_window)
+
+// --- 4. Dynamic Trade Management (Winrate & Expectancy Boost) ----------------
+tm_autoBeOn       = input.bool(true, "Auto Break-Even tai TP1", group = "TM · Dynamic Management", display = display.data_window)
+tm_beOffsetAtr    = input.float(0.05, "Dem BE bao ve phi (x ATR)", minval = 0.0, step = 0.01, group = "TM · Dynamic Management", display = display.data_window)
+tm_trailOn        = input.bool(true, "Trailing Stop sau khi cham TP2", group = "TM · Dynamic Management", display = display.data_window)
+tm_trailType      = input.string("ATR Dynamic", "Kieu Trailing", options = ["ATR Dynamic", "Structure Swing"], group = "TM · Dynamic Management", display = display.data_window)
+tm_trailDistAtr   = input.float(1.5, "Khoang cach Trail (x ATR)", minval = 0.5, step = 0.1, group = "TM · Dynamic Management", display = display.data_window)
+tm_timeDecayOn    = input.bool(true, "Time-Decay / Stagnation Exit", group = "TM · Dynamic Management", display = display.data_window)
+tm_stagnantBars   = input.int(15, "Nen thoat lenh neu < 0.3R va yeu dong luong", minval = 5, maxval = 60, group = "TM · Dynamic Management", display = display.data_window)
+tm_maxHoldBars    = input.int(300, "Thoi gian giu toi da (nen timeout)", minval = 10, maxval = 2000, group = "TM · Dynamic Management", display = display.data_window)
+
+// --- 5. Smart Eligibility Gates (Ablation Toggles) ---------------------------
+tm_gate_regime   = input.bool(true, "Gate 1: Market Regime Filter", group = "TM · Eligibility Gates", display = display.data_window)
+tm_gate_mtf      = input.bool(true, "Gate 2: MTF & BTC Leader Consensus", group = "TM · Eligibility Gates", display = display.data_window)
+tm_gate_obstacle = input.bool(true, "Gate 3: Obstacle Gate (Room-to-Left)", group = "TM · Eligibility Gates", display = display.data_window)
+tm_gate_overext  = input.bool(true, "Gate 4: Anti-Overextension Gate", group = "TM · Eligibility Gates", display = display.data_window)
+tm_gate_circuit  = input.bool(true, "Gate 5: Circuit Breaker & Max Losses", group = "TM · Eligibility Gates", display = display.data_window)
+tm_gate_risk     = input.bool(true, "Gate 6: Futures Margin & Liquidation", group = "TM · Eligibility Gates", display = display.data_window)
+
+// --- 6. Market Regime Classifier Settings ------------------------------------
+tm_regimeAdxTrending   = input.float(22.0, "ADX nguong TRENDING", minval = 10.0, maxval = 50.0, step = 1.0, group = "TM · Market Regime", display = display.data_window)
+tm_regimeAdxChop       = input.float(18.0, "ADX nguong CHOP / SQUEEZE", minval = 5.0, maxval = 30.0, step = 1.0, group = "TM · Market Regime", display = display.data_window)
+tm_regimeBbwLen        = input.int(100, "Bollinger Width lookback", minval = 20, maxval = 300, group = "TM · Market Regime", display = display.data_window)
+tm_regimeBbwSqueezePct = input.float(20.0, "BBW Squeeze Percentile (%)", minval = 5.0, maxval = 50.0, step = 1.0, group = "TM · Market Regime", display = display.data_window)
+
+// --- 7. Obstacle & Overextension Thresholds ----------------------------------
+tm_obstacleBuffer = input.float(0.7, "Ty le khoang cach Can / TP1 (toi thieu)", minval = 0.3, maxval = 2.0, step = 0.05, group = "TM · Obstacle & Overextension", display = display.data_window)
+tm_maxExtAtr      = input.float(2.2, "Do gian toi da so voi EMA 20 (x ATR)", minval = 1.0, step = 0.1, group = "TM · Obstacle & Overextension", display = display.data_window)
+tm_maxCandleAtr   = input.float(2.5, "Bien do nen tin hieu toi da (x ATR)", minval = 1.0, step = 0.1, group = "TM · Obstacle & Overextension", display = display.data_window)
+
+// --- Session Timezone ---
+tm_sessTz = input.string("America/New_York", "Mui gio phien thi truong (NY)", options = ["America/New_York", "Europe/London", "Asia/Ho_Chi_Minh", "Asia/Tokyo", "UTC"], group = "TM · Session", display = display.data_window)
+
+// --- 8. Market Structure Settings --------------------------------------------
+tm_ms_swLen      = input.int(5, "Swing lookback (nen)", minval = 2, maxval = 20, group = "TM · Market Structure", display = display.data_window)
+tm_ms_bosOn      = input.bool(true, "Hien thi BOS", group = "TM · Market Structure", display = display.data_window)
+tm_ms_chochOn    = input.bool(true, "Hien thi CHoCH", group = "TM · Market Structure", display = display.data_window)
+tm_ms_mssOn      = input.bool(true, "Hien thi MSS (break + displ.)", group = "TM · Market Structure", display = display.data_window)
+tm_ms_retestOn   = input.bool(true, "Phat hien Retest sau BOS", group = "TM · Market Structure", display = display.data_window)
+tm_ms_retestBars = input.int(10, "Cua so retest (nen)", minval = 1, maxval = 100, group = "TM · Market Structure", display = display.data_window)
+tm_ms_retestTol  = input.float(0.5, "Retest tolerance (x ATR)", minval = 0.0, step = 0.1, group = "TM · Market Structure", display = display.data_window)
+tm_ms_failOn     = input.bool(true, "Phat hien Failed Breakout", group = "TM · Market Structure", display = display.data_window)
+tm_ms_failBars   = input.int(5, "Cua so failed breakout (nen)", minval = 1, maxval = 50, group = "TM · Market Structure", display = display.data_window)
+tm_ms_contOn     = input.bool(true, "Trend continuation (HH/LL)", group = "TM · Market Structure", display = display.data_window)
+tm_ms_pullOn     = input.bool(true, "Pullback ve EMA", group = "TM · Market Structure", display = display.data_window)
+
+// --- 9. Liquidity, S/R, FVG & Order Block ------------------------------------
+tm_liq_sweepOn   = input.bool(true,  "Hien thi Liquidity Sweep", group = "TM · Liquidity", display = display.data_window)
+tm_liq_pdOn      = input.bool(true,  "Hien thi PDH / PDL", group = "TM · Liquidity", display = display.data_window)
+tm_liq_pwOn      = input.bool(false, "Hien thi PWH / PWL", group = "TM · Liquidity", display = display.data_window)
+tm_liq_sessOn    = input.bool(true,  "Hien thi Session High / Low", group = "TM · Liquidity", display = display.data_window)
+tm_liq_tlOn      = input.bool(true,  "Trendline 2 diem", group = "TM · Liquidity", display = display.data_window)
+tm_liq_tlTol     = input.float(0.25, "Trendline touch tolerance (x ATR)", minval = 0.05, step = 0.05, group = "TM · Liquidity", display = display.data_window)
+tm_liq_tlMaxDev  = input.float(10.0, "Trendline toi da xa gia (x ATR)", minval = 1.0, step = 1.0, group = "TM · Liquidity", display = display.data_window)
+tm_sr_showOn     = input.bool(true,  "Hien thi S/R zones", group = "TM · Zones", display = display.data_window)
+tm_sr_width      = input.float(0.5,  "Zone width (x ATR)", minval = 0.05, step = 0.05, group = "TM · Zones", display = display.data_window)
+tm_sr_maxZone    = input.int(8,      "Max zones", minval = 1, maxval = 20, group = "TM · Zones", display = display.data_window)
+tm_fvg_showOn    = input.bool(true,  "Hien thi FVG", group = "TM · Zones", display = display.data_window)
+tm_fvg_minAtr    = input.float(0.3,  "FVG toi thieu (x ATR)", minval = 0.05, step = 0.05, group = "TM · Zones", display = display.data_window)
+tm_fvg_max       = input.int(20,     "FVG toi da", minval = 1, maxval = 50, group = "TM · Zones", display = display.data_window)
+tm_fvg_life      = input.int(100,    "FVG toi da (nen)", minval = 10, maxval = 500, group = "TM · Zones", display = display.data_window)
+tm_ob_showOn     = input.bool(true,  "Hien thi Order Block", group = "TM · Zones", display = display.data_window)
+tm_ob_max        = input.int(15,     "Order Block toi da", minval = 1, maxval = 30, group = "TM · Zones", display = display.data_window)
+tm_ob_life       = input.int(150,    "Order Block toi da (nen)", minval = 10, maxval = 300, group = "TM · Zones", display = display.data_window)
+
+// --- 10. Indicators & MTF ----------------------------------------------------
+tm_emaFast   = input.int(20,  "EMA fast", minval = 2, maxval = 500, group = "TM · Indicators", display = display.data_window)
+tm_emaMid    = input.int(50,  "EMA mid", minval = 5, maxval = 500, group = "TM · Indicators", display = display.data_window)
+tm_emaSlow   = input.int(200, "EMA slow", minval = 10, maxval = 500, group = "TM · Indicators", display = display.data_window)
+tm_atrLen    = input.int(14,  "ATR length", minval = 1, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_rsiLen    = input.int(14,  "RSI length", minval = 2, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_rsiOb     = input.float(70, "RSI overbought", minval = 50, maxval = 99, group = "TM · Indicators", display = display.data_window)
+tm_rsiOs     = input.float(30, "RSI oversold", minval = 1, maxval = 50, group = "TM · Indicators", display = display.data_window)
+tm_macdF     = input.int(12, "MACD fast", minval = 2, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_macdS     = input.int(26, "MACD slow", minval = 5, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_macdSig   = input.int(9,  "MACD signal", minval = 1, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_dmiLen    = input.int(14,   "DMI / ADX length", minval = 2, maxval = 200, group = "TM · Indicators", display = display.data_window)
+tm_adxMin    = input.float(20, "ADX nguong manh xu huong", minval = 0.0, maxval = 100.0, step = 1.0, group = "TM · Indicators", display = display.data_window)
+
+tm_ctxTf     = input.timeframe("D", "Context TF (H1/H4/D/W/M)", options = ["60", "240", "D", "W", "M"], group = "TM · MTF", display = display.data_window)
+tm_ctxLen    = input.int(200, "Context EMA length", minval = 10, maxval = 500, group = "TM · MTF", display = display.data_window)
+tm_setupTf   = input.timeframe("60", "Setup TF (M15/M30/H1/H4)", options = ["15", "30", "60", "240"], group = "TM · MTF", display = display.data_window)
+tm_setupLen  = input.int(50, "Setup EMA length", minval = 5, maxval = 500, group = "TM · MTF", display = display.data_window)
+tm_htfFilter = input.bool(true, "Loc theo Setup TF", group = "TM · MTF", display = display.data_window)
+tm_htfVetoOn = input.bool(true, "HTF VETO - chan lenh khi Context doi lap", group = "TM · MTF", display = display.data_window)
+
+// --- 11. Volume & VSA --------------------------------------------------------
+tm_vol_maLen  = input.int(20,    "Cua so Volume MA (Wilder RMA)", minval = 5, maxval = 100, group = "TM · Volume VSA", display = display.data_window)
+tm_vol_showMA = input.bool(true, "Hien Volume MA", group = "TM · Volume VSA", display = display.data_window)
+tm_vol_spikeR = input.float(2.2, "TIM - cot dot bien (ratio)", minval = 1.5, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+tm_vol_rVH    = input.float(1.8, "VeryHigh (ratio)", minval = 1.0, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+tm_vol_rH     = input.float(1.2, "High (ratio)",     minval = 0.8, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+tm_vol_rN     = input.float(0.8, "Normal (ratio)",   minval = 0.4, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+tm_vol_rL     = input.float(0.4, "Low (ratio)",      minval = 0.1, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+tm_rvMin      = input.float(1.2, "RelVol nguong",    minval = 0.5, step = 0.1, group = "TM · Volume VSA", display = display.data_window)
+
+// --- 12. Base Scoring Weights (Auto-Adapts by Regime) ------------------------
+tm_w_trend  = input.float(15, "W: Trend (EMA stack)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_struct = input.float(15, "W: Structure (BOS/CHoCH)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_liq    = input.float(12, "W: Liquidity (Sweep)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_loc    = input.float(8,  "W: Location (VWAP/Day)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_sr     = input.float(10, "W: S/R + FVG + OB", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_candle = input.float(10, "W: Candle Patterns", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_vol    = input.float(8,  "W: Volume VSA", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_atr    = input.float(7,  "W: Volatility (Regime)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_mom    = input.float(7,  "W: Momentum (RSI/MACD)", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_sess   = input.float(4,  "W: Session Bias", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+tm_w_mtf    = input.float(4,  "W: MTF Alignment", minval = 0, step = 1, group = "TM · Scoring Weights", display = display.data_window)
+
+tm_scr_noTrade = input.int(49, "Score <= NO TRADE", minval = 0, maxval = 99, group = "TM · Score Thresholds", display = display.data_window)
+tm_scr_weak    = input.int(64, "Score <= WEAK", minval = 1, maxval = 99, group = "TM · Score Thresholds", display = display.data_window)
+tm_scr_setup   = input.int(74, "Score <= SETUP", minval = 1, maxval = 99, group = "TM · Score Thresholds", display = display.data_window)
+tm_scr_strong  = input.int(84, "Score <= STRONG", minval = 1, maxval = 99, group = "TM · Score Thresholds", display = display.data_window)
+tm_minQuality  = input.string("SETUP", "Cap do chat luong toi thieu", options = ["WEAK", "SETUP", "STRONG", "A+"], group = "TM · Score Thresholds", display = display.data_window)
+// v2.1: direction is chosen from two independent 0-100 side scores. A gap below
+// this margin is AMBIGUOUS_SETUP instead of forcing a side.
+tm_scoreMargin = input.int(8, "Min LONG/SHORT score gap", minval = 0, maxval = 50, group = "TM · Score Thresholds", display = display.data_window)
+// Ablation profiles from the v2.1 protocol. They only change feature weights;
+// execution gates stay under the explicit "Eligibility Gates" toggles below.
+tm_ablationMode = input.string("E (Full)", "Ablation feature config", options = ["A (Structure + Location)", "B (A + Trend/Momentum)", "C (B + Volume)", "D (C + MTF + Regime)", "E (Full)"], group = "TM · Score Thresholds", display = display.data_window)
+
+// --- 13. Risk Engine, Targets & Futures Model --------------------------------
+tm_sl_atrMul   = input.float(1.5, "SL = ATR x", minval = 0.1, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+tm_sl_swing    = input.int(10,    "Swing lookback SL", minval = 2, maxval = 100, group = "TM · Risk & Targets", display = display.data_window)
+tm_sl_padAtr   = input.float(0.2, "Dem sau swing (x ATR)", minval = 0, step = 0.05, group = "TM · Risk & Targets", display = display.data_window)
+tm_sl_minAtr   = input.float(0.5, "SL min (x ATR)", minval = 0.1, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+tm_sl_maxAtr   = input.float(3.0, "SL max (x ATR)", minval = 0.5, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+
+// P0 Fix: TP1 la Partial & Auto Break-Even; TP2 la Standard Target kiem tra Min RR; TP3 la Runner
+tm_rr1         = input.float(1.0, "TP1 (R) [Partial & Auto-BE]", minval = 0.5, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+tm_rr2         = input.float(2.0, "TP2 (R) [Standard Target]", minval = 1.0, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+tm_rr3         = input.float(3.0, "TP3 (R) [Runner Target]", minval = 1.5, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+tm_rrMin       = input.float(1.5, "RR toi thieu kiem tra tai TP2", minval = 0.0, step = 0.1, group = "TM · Risk & Targets", display = display.data_window)
+
+tm_maxDay      = input.int(4,  "Lenh toi da / ngay", minval = 1, group = "TM · Risk & Targets", display = display.data_window)
+tm_coolBars    = input.int(8,  "Cooldown giua 2 lenh (nen)", minval = 0, group = "TM · Risk & Targets", display = display.data_window)
+
+// Futures Linear USDT Sizing & Margin
+tm_risk_equity     = input.float(10000.0, "Von tai khoan (USDT)", minval = 100.0, step = 500.0, group = "TM · Futures Risk", display = display.data_window)
+tm_risk_pct        = input.float(1.0,     "Rui ro moi lenh (% von)", minval = 0.1, maxval = 10.0, step = 0.1, group = "TM · Futures Risk", display = display.data_window)
+tm_risk_maxLev     = input.float(20.0,    "Don bay toi da cho phep (x)", minval = 1.0, maxval = 125.0, step = 1.0, group = "TM · Futures Risk", display = display.data_window)
+tm_risk_mmr        = input.float(0.005,   "Ty le ky quy duy tri MMR", minval = 0.001, maxval = 0.05, step = 0.001, group = "TM · Futures Risk", display = display.data_window)
+tm_risk_feeSlipPct = input.float(0.08,    "Phi + Truot gia roundtrip (%)", minval = 0.0, maxval = 1.0, step = 0.01, group = "TM · Futures Risk", display = display.data_window)
+tm_risk_maxLosses  = input.int(3,         "Ngat mach khi thua lien tiep (lenh)", minval = 1, maxval = 10, group = "TM · Futures Risk", display = display.data_window)
+
+// --- 14. Visual Display ------------------------------------------------------
+tm_showViz    = input.bool(true, "Master Visual Switch", group = "TM · Display", display = display.data_window)
+tm_cBull      = input.color(color.new(#089981, 0), "Mau LONG",  group = "TM · Display", inline = "clr", display = display.data_window)
+tm_cBear      = input.color(color.new(#f23645, 0), "Mau SHORT", group = "TM · Display", inline = "clr", display = display.data_window)
+tm_showSig    = input.bool(true, "Nhan Entry & Limit", group = "TM · Display", display = display.data_window)
+tm_showHit    = input.bool(true, "Nhan cham TP/SL/BE/TO", group = "TM · Display", display = display.data_window)
+tm_showZone   = input.bool(true, "Ve vung SL/TP", group = "TM · Display", display = display.data_window)
+tm_zoneLen    = input.int(30,    "Do dai vung ve (nen)", minval = 1, maxval = 300, group = "TM · Display", display = display.data_window)
+tm_showEma    = input.bool(false, "EMA 20/50/200 tren gia", group = "TM · Display", display = display.data_window)
+tm_showPd     = input.bool(true, "Duong PDH / PDL", group = "TM · Display", display = display.data_window)
+tm_showPw     = input.bool(false, "Duong PWH / PWL", group = "TM · Display", display = display.data_window)
+tm_showSess   = input.bool(true, "Duong Session Hi / Lo", group = "TM · Display", display = display.data_window)
+tm_showPriceZones = input.bool(true, "Zone S/R + FVG + OB", group = "TM · Display", display = display.data_window)
+tm_showTl     = input.bool(true, "Trendline 2 diem", group = "TM · Display", display = display.data_window)
+tm_showMsLabels = input.bool(true, "Nhan BOS / CHoCH / MSS / Retest", group = "TM · Display", display = display.data_window)
+tm_showSweepLabels = input.bool(true, "Nhan Sweep", group = "TM · Display", display = display.data_window)
+tm_showVwap   = input.bool(true, "VWAP tren gia", group = "TM · Display", display = display.data_window)
+tm_showVol    = input.bool(true, "Histogram Volume", group = "TM · Display", display = display.data_window)
+tm_showDash   = input.bool(true, "Dashboard da nang", group = "TM · Display", display = display.data_window)
+tm_dashSize   = input.string("Small", "Dash size", options = ["Tiny", "Small", "Normal"], group = "TM · Display", display = display.data_window)
+tm_dashMode   = input.string("Compact", "Dash mode (v2.1)", options = ["Compact", "Advanced"], group = "TM · Display", display = display.data_window)
+
+// =============================================================================
+//  L1 - TYPES & STATE DEFINITIONS (Pine Script v6 UDTs)
+// =============================================================================
+
+// Market Structure & Analytical Event
+type TMEvent
+    string kind
+    string dir
+    int    srcTime
+    int    srcBar
+    string tf
+    bool   confirmed
+    float  level
+
+// Market Regime State
+type MarketRegime
+    int    code         // 1 = TRENDING, 0 = RANGING, -1 = CHOPPY_SQUEEZE
+    int    trendDir     // 1 = Bull, -1 = Bear, 0 = Neutral
+    string name         // "TRENDING_BULL", "TRENDING_BEAR", "RANGING", "CHOPPY"
+    float  adx
+    float  bbwPct
+    bool   isSqueeze
+
+// Smart Eligibility Gates Status
+type GateStatus
+    bool   regimeOk
+    bool   mtfOk
+    bool   btcOk
+    bool   obstacleOk
+    bool   overextOk
+    bool   circuitOk
+    bool   allPassed
+    string blockReason      // highest-priority blocker (stable order)
+    string blockMask        // every active blocker code, comma separated
+
+// Comprehensive Trade Plan (Market or Pullback Limit)
+type TMPlan2
+    bool   valid
+    int    dir
+    string orderType    // "MARKET" or "LIMIT"
+    float  entry
+    float  limitPrice
+    float  sl
+    float  tp1
+    float  tp2
+    float  tp3
+    float  risk
+    float  evalRR
+    float  posSize
+    float  notional
+    float  effLev
+    float  marginReq
+    float  liqPrice
+    float  netRR
+    string evalTarget   // target the RR gate is evaluated against ("TP2")
+    string reason       // standardized BLOCKED_* code or VALID
+
+// Fair Value Gap (FVG) Zone with Mitigation Tracking
+type FvgZone
+    float top
+    float bot
+    int   side          // 1 = Bullish FVG, -1 = Bearish FVG
+    int   barIdx
+    bool  mitigated
+
+// Order Block (OB) Zone with Mitigation Tracking
+type ObZone
+    float top
+    float bot
+    int   side          // 1 = Bullish OB, -1 = Bearish OB
+    int   barIdx
+    bool  mitigated
+
+// State Machine Exit Reasons Constants
+int TM2_EXIT_NONE      = 0
+int TM2_EXIT_SL        = 1
+int TM2_EXIT_TP1       = 2
+int TM2_EXIT_TP2       = 3
+int TM2_EXIT_TP3       = 4
+int TM2_EXIT_BREAKEVEN = 5
+int TM2_EXIT_TRAIL     = 6
+int TM2_EXIT_TIMEDECAY = 7
+int TM2_EXIT_TIMEOUT   = 8
+int TM2_CANCEL_TIMEOUT = 9
+int TM2_CANCEL_MISSED  = 10
+
+// State Machine Stages
+int TM2_STAGE_IDLE          = 0
+int TM2_STAGE_PENDING_LIMIT = 1
+int TM2_STAGE_OPEN          = 2
+int TM2_STAGE_TP1_BE        = 3
+int TM2_STAGE_TP2_TRAIL     = 4
+
+// =============================================================================
+//  L2 - VOLATILITY & MARKET REGIME CLASSIFIER (Phase 3 Core Engine)
+// =============================================================================
+
+// --- 1. Basic Volatility Calculations ----------------------------------------
+tm_atr    = ta.atr(tm_atrLen)
+tm_atrPct = not na(close) and close > 0.0 ? (tm_atr / close) * 100.0 : 0.0
+
+// Bollinger Bands & Squeeze Measurement
+tm_bbBasis = ta.sma(close, 20)
+tm_bbDev   = 2.0 * ta.stdev(close, 20)
+tm_bbUpper = tm_bbBasis + tm_bbDev
+tm_bbLower = tm_bbBasis - tm_bbDev
+tm_bbWidth = tm_bbBasis > 0.0 ? (tm_bbUpper - tm_bbLower) / tm_bbBasis * 100.0 : 0.0
+
+tm_bbwLowest  = ta.lowest(tm_bbWidth, tm_regimeBbwLen)
+tm_bbwHighest = ta.highest(tm_bbWidth, tm_regimeBbwLen)
+tm_bbwPct     = (tm_bbwHighest - tm_bbwLowest) > 0.0 ? (tm_bbWidth - tm_bbwLowest) / (tm_bbwHighest - tm_bbwLowest) * 100.0 : 50.0
+bool tm_isSqueeze = tm_bbwPct <= tm_regimeBbwSqueezePct
+bool tm_bbExpand  = tm_bbWidth > ta.sma(tm_bbWidth, 20)
+
+// Directional Movement & ADX
+[tm_diPlus, tm_diMinus, tm_adx] = ta.dmi(tm_dmiLen, 14)
+
+// EMA 20 and 50 Slopes (normalized by ATR to be asset-neutral)
+tm_ema20 = ta.ema(close, tm_emaFast)
+tm_ema50 = ta.ema(close, tm_emaMid)
+float tm_emaSlope20 = not na(tm_atr) and tm_atr > 0.0 ? (tm_ema20 - tm_ema20[3]) / (3.0 * tm_atr) : 0.0
+float tm_emaSlope50 = not na(tm_atr) and tm_atr > 0.0 ? (tm_ema50 - tm_ema50[5]) / (5.0 * tm_atr) : 0.0
+
+bool tm_emaBull = close > tm_ema20 and tm_ema20 > tm_ema50 and tm_emaSlope20 > 0.03
+bool tm_emaBear = close < tm_ema20 and tm_ema20 < tm_ema50 and tm_emaSlope20 < -0.03
+
+// --- 2. Market Regime Classifier ---------------------------------------------
+// Phân loại thị trường thành:
+//  - TRENDING (1): ADX >= adxTrending, EMA aligned, BBW expanding, không ở trong Squeeze.
+//  - CHOPPY_SQUEEZE (-1): ADX < adxChop hoặc BBW trong vùng nén chặt (Squeeze).
+//  - RANGING (0): Thị trường tích lũy / đi ngang với biên độ rõ ràng, thích hợp đánh Mean-Reversion tại S/R.
+f_classifyRegime(float adxVal, bool isSq, float slope20, bool emaUp, bool emaDn, float bbwP) =>
+    int regCode  = 0
+    int tDir     = 0
+    string rName = "RANGING"
+
+    if adxVal >= tm_regimeAdxTrending and (emaUp or emaDn) and not isSq
+        regCode := 1
+        tDir    := emaUp ? 1 : -1
+        rName   := emaUp ? "TRENDING_BULL" : "TRENDING_BEAR"
+    else if adxVal < tm_regimeAdxChop or (isSq and math.abs(slope20) < 0.05)
+        regCode := -1
+        tDir    := 0
+        rName   := "CHOPPY_SQUEEZE"
+    else
+        regCode := 0
+        tDir    := 0
+        rName   := "RANGING"
+
+    MarketRegime.new(regCode, tDir, rName, adxVal, bbwP, isSq)
+
+tm_regime = f_classifyRegime(tm_adx, tm_isSqueeze, tm_emaSlope20, tm_emaBull, tm_emaBear, tm_bbwPct)
+
+// Volatility score [-1, +1]. v2.1 keeps volatility OUT of the directional score:
+// it drives the regime classifier, mode selection and the gates instead.
+float tm_volScore = tm_bbExpand ? 1.0 : tm_isSqueeze ? -1.0 : 0.0
+
+// =============================================================================
+//  L3 - MARKET STRUCTURE, PRICE ACTION & LIQUIDITY (v2.0)
+// =============================================================================
+
+// --- 1. Basic Candle Dimensions & Metrics ------------------------------------
+float tm_body    = math.abs(close - open)
+float tm_range   = math.max(high - low, syminfo.mintick)
+float tm_hiWick  = high - math.max(close, open)
+float tm_loWick  = math.min(close, open) - low
+bool  tm_bullBar = close > open
+bool  tm_bearBar = close < open
+
+float tm_prevBody = math.abs(close[1] - open[1])
+
+// Displacement Candle
+bool tm_dispBull = tm_body >= 1.5 * tm_atr and tm_hiWick < tm_body * 0.3
+bool tm_dispBear = tm_body >= 1.5 * tm_atr and tm_loWick < tm_body * 0.3
+
+// Pin Bar Pattern
+bool tm_bullPin = tm_bullBar and tm_loWick >= 2.0 * tm_body
+bool tm_bearPin = tm_bearBar and tm_hiWick >= 2.0 * tm_body
+
+// Engulfing Pattern
+bool tm_bullEng = tm_bullBar and close[1] < open[1] and close >= open[1] and open <= close[1] and tm_body >= tm_prevBody
+bool tm_bearEng = tm_bearBar and close[1] > open[1] and close <= open[1] and open >= close[1] and tm_body >= tm_prevBody
+
+// Rejection Candle
+bool tm_bullRej = tm_hiWick >= tm_range * 0.55 and tm_loWick <= tm_range * 0.15 and tm_bullBar
+bool tm_bearRej = tm_loWick >= tm_range * 0.55 and tm_hiWick <= tm_range * 0.15 and tm_bearBar
+
+float tm_cpBull = (tm_bullPin ? 1.0 : 0.0) + (tm_bullEng ? 1.0 : 0.0) + (tm_dispBull ? 1.2 : 0.0) + (tm_bullRej ? 0.8 : 0.0)
+float tm_cpBear = (tm_bearPin ? 1.0 : 0.0) + (tm_bearEng ? 1.0 : 0.0) + (tm_dispBear ? 1.2 : 0.0) + (tm_bearRej ? 0.8 : 0.0)
+float tm_cpScore = tm_cpBull > tm_cpBear ? math.min(1.0, tm_cpBull / 3.0) : tm_cpBear > tm_cpBull ? -math.min(1.0, tm_cpBear / 3.0) : 0.0
+
+// --- 2. Event Buffer & Helper ------------------------------------------------
+var array<TMEvent> tm_evtBuf = array.new<TMEvent>()
+
+f_pushEvent(string kind, string dir, int barIdx, int timeVal, bool confirmed, float lvl) =>
+    array.push(tm_evtBuf, TMEvent.new(kind, dir, timeVal, barIdx, timeframe.period, confirmed, lvl))
+    while array.size(tm_evtBuf) > 50
+        array.shift(tm_evtBuf)
+
+// --- 3. Swings & Trend Tracking ----------------------------------------------
+float tm_pivH = ta.pivothigh(high, tm_ms_swLen, tm_ms_swLen)
+float tm_pivL = ta.pivotlow(low,   tm_ms_swLen, tm_ms_swLen)
+
+var float tm_swingHi  = na
+var float tm_swingLo  = na
+var float tm_prevHigh = na
+var float tm_prevLow  = na
+var int   tm_hiBar    = na
+var int   tm_loBar    = na
+
+if not na(tm_pivH)
+    tm_prevHigh := tm_swingHi
+    tm_swingHi  := high[tm_ms_swLen]
+    tm_hiBar    := bar_index - tm_ms_swLen
+
+if not na(tm_pivL)
+    tm_prevLow := tm_swingLo
+    tm_swingLo := low[tm_ms_swLen]
+    tm_loBar   := bar_index - tm_ms_swLen
+
+var int tm_trend = 0
+if not na(tm_swingHi) and not na(tm_prevHigh) and not na(tm_swingLo) and not na(tm_prevLow)
+    if tm_swingHi > tm_prevHigh and tm_swingLo > tm_prevLow
+        tm_trend := 1
+    else if tm_swingHi < tm_prevHigh and tm_swingLo < tm_prevLow
+        tm_trend := -1
+
+// --- 4. BOS, CHoCH, MSS ------------------------------------------------------
+bool tm_crossOverHi  = ta.crossover(close, tm_swingHi)
+bool tm_crossUnderLo = ta.crossunder(close, tm_swingLo)
+
+bool tm_bosUp   = tm_ms_bosOn and not na(tm_swingHi) and tm_crossOverHi and tm_trend == 1
+bool tm_bosDown = tm_ms_bosOn and not na(tm_swingLo) and tm_crossUnderLo and tm_trend == -1
+
+bool tm_chochUp   = tm_ms_chochOn and not na(tm_swingHi) and tm_crossOverHi and tm_trend == -1
+bool tm_chochDown = tm_ms_chochOn and not na(tm_swingLo) and tm_crossUnderLo and tm_trend == 1
+
+bool tm_mssUp   = tm_ms_mssOn and tm_chochUp and tm_dispBull
+bool tm_mssDown = tm_ms_mssOn and tm_chochDown and tm_dispBear
+
+if tm_bosUp
+    f_pushEvent("BOS", "bull", bar_index, time, barstate.isconfirmed, tm_swingHi)
+if tm_bosDown
+    f_pushEvent("BOS", "bear", bar_index, time, barstate.isconfirmed, tm_swingLo)
+if tm_chochUp
+    f_pushEvent("CHOCH", "bull", bar_index, time, barstate.isconfirmed, tm_swingHi)
+if tm_chochDown
+    f_pushEvent("CHOCH", "bear", bar_index, time, barstate.isconfirmed, tm_swingLo)
+if tm_mssUp
+    f_pushEvent("MSS", "bull", bar_index, time, barstate.isconfirmed, tm_swingHi)
+if tm_mssDown
+    f_pushEvent("MSS", "bear", bar_index, time, barstate.isconfirmed, tm_swingLo)
+
+// --- 5. Retest & Failed Breakout ---------------------------------------------
+var float tm_lastBreakLvl = na
+var int   tm_lastBreakBar = na
+var int   tm_lastBreakDir = 0
+
+if tm_bosUp or tm_chochUp
+    tm_lastBreakLvl := tm_swingHi
+    tm_lastBreakBar := bar_index
+    tm_lastBreakDir := 1
+else if tm_bosDown or tm_chochDown
+    tm_lastBreakLvl := tm_swingLo
+    tm_lastBreakBar := bar_index
+    tm_lastBreakDir := -1
+
+bool tm_retestBull = tm_ms_retestOn and tm_lastBreakDir == 1 and not na(tm_lastBreakLvl) and not na(tm_lastBreakBar) and (bar_index - tm_lastBreakBar <= tm_ms_retestBars) and (bar_index - tm_lastBreakBar >= 1) and low <= tm_lastBreakLvl + tm_ms_retestTol * tm_atr and close > tm_lastBreakLvl
+bool tm_retestBear = tm_ms_retestOn and tm_lastBreakDir == -1 and not na(tm_lastBreakLvl) and not na(tm_lastBreakBar) and (bar_index - tm_lastBreakBar <= tm_ms_retestBars) and (bar_index - tm_lastBreakBar >= 1) and high >= tm_lastBreakLvl - tm_ms_retestTol * tm_atr and close < tm_lastBreakLvl
+
+bool tm_failBull = tm_ms_failOn and not na(tm_lastBreakBar) and (bar_index - tm_lastBreakBar <= tm_ms_failBars) and tm_lastBreakDir == 1 and close < tm_lastBreakLvl - tm_atr * 0.3
+bool tm_failBear = tm_ms_failOn and not na(tm_lastBreakBar) and (bar_index - tm_lastBreakBar <= tm_ms_failBars) and tm_lastBreakDir == -1 and close > tm_lastBreakLvl + tm_atr * 0.3
+
+// Trend continuation / Pullback
+bool tm_isHH = not na(tm_pivH) and not na(tm_prevHigh) and high[tm_ms_swLen] > tm_prevHigh
+bool tm_isLL = not na(tm_pivL) and not na(tm_prevLow)  and low[tm_ms_swLen]  < tm_prevLow
+bool tm_contBull = tm_ms_contOn and tm_trend == 1 and tm_isHH
+bool tm_contBear = tm_ms_contOn and tm_trend == -1 and tm_isLL
+bool tm_pullBull = tm_ms_pullOn and tm_trend == 1 and low <= tm_ema50 and close > tm_ema50
+bool tm_pullBear = tm_ms_pullOn and tm_trend == -1 and high >= tm_ema50 and close < tm_ema50
+
+// --- 6. Market Structure Visual Labels ---------------------------------------
+if tm_showViz and tm_showMsLabels and tm_ms_bosOn and tm_bosUp
+    label.new(bar_index, low,  "BOS+", style = label.style_label_up,   color = color.new(tm_cBull, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_bosOn and tm_bosDown
+    label.new(bar_index, high, "BOS-", style = label.style_label_down, color = color.new(tm_cBear, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_chochOn and tm_chochUp
+    label.new(bar_index, low,  "CHoCH+", style = label.style_label_up,   color = color.new(tm_cBull, 0), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_chochOn and tm_chochDown
+    label.new(bar_index, high, "CHoCH-", style = label.style_label_down, color = color.new(tm_cBear, 0), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_mssOn and tm_mssUp and not tm_bosUp
+    label.new(bar_index, low,  "MSS+", style = label.style_label_up,   color = color.new(#f5c542, 10), textcolor = color.black, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_mssOn and tm_mssDown and not tm_bosDown
+    label.new(bar_index, high, "MSS-", style = label.style_label_down, color = color.new(#f5c542, 10), textcolor = color.black, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_retestOn and tm_retestBull
+    label.new(bar_index, low, "RT+", style = label.style_label_up, color = color.new(tm_cBull, 40), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_retestOn and tm_retestBear
+    label.new(bar_index, high, "RT-", style = label.style_label_down, color = color.new(tm_cBear, 40), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_failOn and tm_failBull
+    label.new(bar_index, low, "FAIL+", style = label.style_label_up, color = color.new(color.gray, 10), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showMsLabels and tm_ms_failOn and tm_failBear
+    label.new(bar_index, high, "FAIL-", style = label.style_label_down, color = color.new(color.gray, 10), textcolor = color.white, size = size.tiny, force_overlay = true)
+
+// --- 7. Session Tracking (Session Hi / Lo) -----------------------------------
+bool tm_sessAsia    = f_sessAsia(tm_sessTz)
+bool tm_sessLondon  = f_sessLondon(tm_sessTz)
+bool tm_sessNy      = f_sessNy(tm_sessTz)
+bool tm_sessOverlap = tm_sessLondon and tm_sessNy
+string tm_sessName  = f_sessName(tm_sessAsia, tm_sessLondon, tm_sessNy)
+
+var float tm_sessHi   = na
+var float tm_sessLo   = na
+var string tm_sessPrev = ""
+bool tm_sessChanged = tm_sessName != tm_sessPrev
+if tm_sessChanged and tm_sessName != "-"
+    tm_sessHi := high
+    tm_sessLo := low
+else if tm_sessName != "-"
+    tm_sessHi := math.max(nz(tm_sessHi, high), high)
+    tm_sessLo := math.min(nz(tm_sessLo, low),  low)
+if tm_sessName != "-"
+    tm_sessPrev := tm_sessName
+
+// --- 8. Equal Highs / Lows ---------------------------------------------------
+float tm_eqThresh = tm_atr * 0.05
+bool tm_eqHi = not na(tm_pivH) and not na(tm_prevHigh) and math.abs(high[tm_ms_swLen] - tm_prevHigh) <= tm_eqThresh
+bool tm_eqLo = not na(tm_pivL) and not na(tm_prevLow)  and math.abs(low[tm_ms_swLen]  - tm_prevLow)  <= tm_eqThresh
+
+// --- 9. Trendline 2 diem (Up & Down) -----------------------------------------
+var float tm_tl1Lo     = na
+var int   tm_tl1LoB    = na
+var float tm_tl2Lo     = na
+var int   tm_tl2LoB    = na
+var float tm_tl1Hi     = na
+var int   tm_tl1HiB    = na
+var float tm_tl2Hi     = na
+var int   tm_tl2HiB    = na
+var int   tm_tlLoTouch = 0
+var int   tm_tlHiTouch = 0
+
+if not na(tm_pivL)
+    tm_tl1Lo  := tm_tl2Lo
+    tm_tl1LoB := tm_tl2LoB
+    tm_tl2Lo  := low[tm_ms_swLen]
+    tm_tl2LoB := bar_index - tm_ms_swLen
+    tm_tlLoTouch := 0
+if not na(tm_pivH)
+    tm_tl1Hi  := tm_tl2Hi
+    tm_tl1HiB := tm_tl2HiB
+    tm_tl2Hi  := high[tm_ms_swLen]
+    tm_tl2HiB := bar_index - tm_ms_swLen
+    tm_tlHiTouch := 0
+
+bool tm_tlUpOk = not na(tm_tl1Lo) and not na(tm_tl2Lo) and not na(tm_tl1LoB) and not na(tm_tl2LoB) and tm_tl2LoB > tm_tl1LoB
+bool tm_tlDnOk = not na(tm_tl1Hi) and not na(tm_tl2Hi) and not na(tm_tl1HiB) and not na(tm_tl2HiB) and tm_tl2HiB > tm_tl1HiB
+float tm_tlUpSlope = tm_tlUpOk ? (tm_tl2Lo - tm_tl1Lo) / float(tm_tl2LoB - tm_tl1LoB) : 0.0
+float tm_tlDnSlope = tm_tlDnOk ? (tm_tl2Hi - tm_tl1Hi) / float(tm_tl2HiB - tm_tl1HiB) : 0.0
+float tm_tlUpAt = tm_tlUpOk ? tm_tl1Lo + tm_tlUpSlope * float(bar_index - tm_tl1LoB) : na
+float tm_tlDnAt = tm_tlDnOk ? tm_tl1Hi + tm_tlDnSlope * float(bar_index - tm_tl1HiB) : na
+
+if tm_tlUpOk and not na(tm_tlUpAt) and math.abs(low - tm_tlUpAt) <= tm_liq_tlTol * tm_atr
+    tm_tlLoTouch += 1
+if tm_tlDnOk and not na(tm_tlDnAt) and math.abs(high - tm_tlDnAt) <= tm_liq_tlTol * tm_atr
+    tm_tlHiTouch += 1
+
+// --- 10. S/R Zones (Shared Engine Integration) -------------------------------
+float sr_pivH = ta.pivothigh(high, 10, 10)
+float sr_pivL = ta.pivotlow(low, 10, 10)
+if not na(sr_pivH)
+    f_addZone(sr_zones, high[10], -1, tm_atr, tm_sr_width, tm_sr_maxZone)
+if not na(sr_pivL)
+    f_addZone(sr_zones, low[10], 1, tm_atr, tm_sr_width, tm_sr_maxZone)
+
+// --- 11. FVG (Fair Value Gap) with Mitigation & GC ---------------------------
+var array<FvgZone> tm_fvgs = array.new<FvgZone>()
+
+bool tm_newFvgBull = low > high[2] and (low - high[2]) >= tm_fvg_minAtr * tm_atr
+bool tm_newFvgBear = high < low[2] and (low[2] - high) >= tm_fvg_minAtr * tm_atr
+
+if tm_newFvgBull
+    array.push(tm_fvgs, FvgZone.new(low, high[2], 1, bar_index, false))
+if tm_newFvgBear
+    array.push(tm_fvgs, FvgZone.new(low[2], high, -1, bar_index, false))
+
+while array.size(tm_fvgs) > tm_fvg_max
+    array.shift(tm_fvgs)
+
+for g in tm_fvgs
+    if bar_index - g.barIdx > tm_fvg_life
+        g.mitigated := true
+    if g.side == 1 and low <= g.bot
+        g.mitigated := true
+    if g.side == -1 and high >= g.top
+        g.mitigated := true
+
+// Find nearest active FVG for pullback limit entry
+float tm_nearFvgBullPx = na
+float tm_nearFvgBearPx = na
+for g in tm_fvgs
+    if not g.mitigated
+        if g.side == 1 and (na(tm_nearFvgBullPx) or g.top > tm_nearFvgBullPx)
+            tm_nearFvgBullPx := (g.top + g.bot) * 0.5
+        if g.side == -1 and (na(tm_nearFvgBearPx) or g.bot < tm_nearFvgBearPx)
+            tm_nearFvgBearPx := (g.top + g.bot) * 0.5
+
+// --- 12. Order Block with Mitigation & GC ------------------------------------
+var array<ObZone> tm_obs = array.new<ObZone>()
+
+bool tm_newObBull = tm_dispBull and close[1] < open[1]
+bool tm_newObBear = tm_dispBear and close[1] > open[1]
+
+if tm_newObBull
+    array.push(tm_obs, ObZone.new(open[1], close[1], 1, bar_index - 1, false))
+if tm_newObBear
+    array.push(tm_obs, ObZone.new(close[1], open[1], -1, bar_index - 1, false))
+
+while array.size(tm_obs) > tm_ob_max
+    array.shift(tm_obs)
+
+for o in tm_obs
+    if bar_index - o.barIdx > tm_ob_life
+        o.mitigated := true
+    if o.side == 1 and low <= o.bot
+        o.mitigated := true
+    if o.side == -1 and high >= o.top
+        o.mitigated := true
+
+// Find nearest active OB edge for pullback limit entry
+float tm_nearObBullPx = na
+float tm_nearObBearPx = na
+for o in tm_obs
+    if not o.mitigated
+        if o.side == 1 and (na(tm_nearObBullPx) or o.top > tm_nearObBullPx)
+            tm_nearObBullPx := o.top
+        if o.side == -1 and (na(tm_nearObBearPx) or o.bot < tm_nearObBearPx)
+            tm_nearObBearPx := o.bot
+
+// =============================================================================
+//  L4 - MOMENTUM, VOLUME & ANTI-OVEREXTENSION METRICS (v2.0)
+// =============================================================================
+
+// --- 1. Trend Stack (EMA 20 / 50 / 200) ---------------------------------------
+tm_emaF = ta.ema(close, tm_emaFast)
+tm_emaM = ta.ema(close, tm_emaMid)
+tm_emaS = ta.ema(close, tm_emaSlow)
+
+bool tm_emaStackBull = tm_emaF > tm_emaM and tm_emaM > tm_emaS
+bool tm_emaStackBear = tm_emaF < tm_emaM and tm_emaM < tm_emaS
+float tm_trendScore  = tm_emaStackBull ? 1.0 : tm_emaStackBear ? -1.0 : (close > tm_emaF ? 0.4 : close < tm_emaF ? -0.4 : 0.0)
+
+// --- 2. Momentum (RSI + MACD) ------------------------------------------------
+tm_rsi = ta.rsi(close, tm_rsiLen)
+[tm_macdLine, tm_macdSignal, tm_macdHist] = ta.macd(close, tm_macdF, tm_macdS, tm_macdSig)
+
+float tm_rsiScore  = tm_rsi < tm_rsiOs ? 1.0 : tm_rsi > tm_rsiOb ? -1.0 : (tm_rsi - 50.0) / 20.0
+float tm_macdScore = tm_macdHist > 0 ? (tm_macdHist > tm_macdHist[1] ? 1.0 : 0.5) : (tm_macdHist < tm_macdHist[1] ? -1.0 : -0.5)
+float tm_momScore  = f_clamp(tm_rsiScore * 0.4 + tm_macdScore * 0.6, -1.0, 1.0)
+
+// --- 3. Volume VSA Engine (Wilder RMA + RelVol + OBV) ------------------------
+float tm_vol = nz(volume)
+float tm_volMA = ta.rma(tm_vol, tm_vol_maLen)
+float tm_volRatio = not na(tm_volMA) and tm_volMA > 0.0 ? tm_vol / tm_volMA : 0.0
+string tm_volBucket = f_vsaName(tm_vol, tm_volMA, tm_vol_spikeR, tm_vol_rVH, tm_vol_rH, tm_vol_rN, tm_vol_rL)
+bool tm_isTim = not na(tm_volMA) and tm_volMA > 0.0 and tm_vol >= tm_volMA * tm_vol_spikeR
+
+// Relative Volume (RelVol)
+float tm_volSma20 = ta.sma(tm_vol, 20)
+float tm_relVol = not na(tm_volSma20) and tm_volSma20 > 0.0 ? tm_vol / tm_volSma20 : 0.0
+
+// On-Balance Volume (OBV) Slope
+var float tm_obv = 0.0
+tm_obv := tm_obv + (close > close[1] ? tm_vol : close < close[1] ? -tm_vol : 0.0)
+float tm_obvSlope = tm_obv - nz(tm_obv[10])
+float tm_obvScore = tm_obvSlope > 0 ? 1.0 : tm_obvSlope < 0 ? -1.0 : 0.0
+
+float tm_volumeScore = f_clamp((tm_isTim ? 1.0 : tm_relVol >= tm_rvMin ? 0.7 : 0.0) * (close >= open ? 1.0 : -1.0) * 0.6 + tm_obvScore * 0.4, -1.0, 1.0)
+
+// --- 4. Anchored VWAP (Intraday Location) ------------------------------------
+var float tm_cumVol = 0.0
+var float tm_cumVwap = 0.0
+if f_isNewDay()
+    tm_cumVol  := tm_vol
+    tm_cumVwap := tm_vol * hlc3
+else
+    tm_cumVol  += tm_vol
+    tm_cumVwap += tm_vol * hlc3
+
+float tm_vwap = tm_cumVol > 0.0 ? tm_cumVwap / tm_cumVol : close
+bool tm_vwapOk = not na(tm_vwap) and tm_vwap > 0.0
+float tm_vwapScore = tm_vwapOk ? f_clamp((close - tm_vwap) / nz(tm_atr, close * 0.01), -1.0, 1.0) : 0.0
+
+// --- 5. Anti-Overextension / Exhaustion Metrics (Pillar 5) --------------------
+// Đo độ giãn của giá so với EMA 20 và biên độ nến tín hiệu
+float tm_extEma = not na(tm_atr) and tm_atr > 0.0 ? math.abs(close - tm_emaF) / tm_atr : 0.0
+float tm_extCandle = not na(tm_atr) and tm_atr > 0.0 ? (high - low) / tm_atr : 1.0
+bool  tm_isOverextended = tm_extEma > tm_maxExtAtr or tm_extCandle > tm_maxCandleAtr
+
+// =============================================================================
+//  L5 - MTF CONTEXT, TUPLE SECURITY & INTER-MARKET INTELLIGENCE (v2.0)
+// =============================================================================
+
+// --- 1. Timeframe Hierarchy Validation ---------------------------------------
+int tm_secChart = timeframe.in_seconds(timeframe.period)
+int tm_secSetup = timeframe.in_seconds(tm_setupTf)
+int tm_secCtx   = timeframe.in_seconds(tm_ctxTf)
+bool tm_tfHierarchyOk = tm_secChart <= tm_secSetup and tm_secSetup <= tm_secCtx
+
+// --- 2. Tuple MTF Requests (Strictly <= 5 calls, non-repainting) --------------
+// Request 1: Context TF Tuple (H1/H4/D)
+[tm_ctxClose, tm_ctxHigh, tm_ctxLow, tm_ctxEmaF, tm_ctxRsi] = request.security(syminfo.tickerid, tm_ctxTf, [close[1], high[1], low[1], ta.ema(close, tm_ctxLen)[1], ta.rsi(close, 14)[1]], lookahead = barmerge.lookahead_on, gaps = barmerge.gaps_off)
+int tm_ctxDir = tm_tfHierarchyOk and not na(tm_ctxClose) and not na(tm_ctxEmaF) ? (tm_ctxClose > tm_ctxEmaF ? 1 : tm_ctxClose < tm_ctxEmaF ? -1 : 0) : 0
+
+// Request 2: Setup TF Tuple (M15/H1)
+[tm_setupClose, tm_setupHigh, tm_setupLow, tm_setupEmaF, tm_setupRsi] = request.security(syminfo.tickerid, tm_setupTf, [close[1], high[1], low[1], ta.ema(close, tm_setupLen)[1], ta.rsi(close, 14)[1]], lookahead = barmerge.lookahead_on, gaps = barmerge.gaps_off)
+int tm_setupDir = tm_tfHierarchyOk and not na(tm_setupClose) and not na(tm_setupEmaF) ? (tm_setupClose > tm_setupEmaF ? 1 : tm_setupClose < tm_setupEmaF ? -1 : 0) : 0
+
+// Combined MTF Alignment Bias [-1.0 to +1.0]
+float tm_gMtfBias = tm_tfHierarchyOk ? (float(tm_ctxDir) + float(tm_setupDir)) / 2.0 : 0.0
+
+// Request 3: Daily High/Low Tuple (PDH / PDL)
+[tm_pdh, tm_pdl] = request.security(syminfo.tickerid, "D", [high[1], low[1]], lookahead = barmerge.lookahead_on, gaps = barmerge.gaps_off)
+float tm_dayRange = not na(tm_pdh) and not na(tm_pdl) and tm_pdh > tm_pdl ? (close - tm_pdl) / (tm_pdh - tm_pdl) * 2.0 - 1.0 : 0.0
+
+// Request 4: Weekly High/Low Tuple (PWH / PWL)
+[tm_pwh, tm_pwl] = request.security(syminfo.tickerid, "W", [high[1], low[1]], lookahead = barmerge.lookahead_on, gaps = barmerge.gaps_off)
+
+// Liquidity Sweep Detection (v1 Parity)
+bool tm_sweepBull = (tm_liq_pdOn and low < tm_pdl and close > tm_pdl) or (tm_liq_pwOn and low < tm_pwl and close > tm_pwl) or (tm_liq_sessOn and not na(tm_sessLo) and low < tm_sessLo and close > tm_sessLo) or (tm_eqLo and low[tm_ms_swLen] < tm_prevLow and close > tm_prevLow)
+bool tm_sweepBear = (tm_liq_pdOn and high > tm_pdh and close < tm_pdh) or (tm_liq_pwOn and high > tm_pwh and close < tm_pwh) or (tm_liq_sessOn and not na(tm_sessHi) and high > tm_sessHi and close < tm_sessHi) or (tm_eqHi and high[tm_ms_swLen] > tm_prevHigh and close < tm_prevHigh)
+
+// Sweep memory for the v2.1 Mode B (Liquidity Sweep Reversal) confirmation
+// window. Storing the swept extreme lets Mode B invalidate itself instead of
+// triangulating a level from PDH/PDL that may have changed since the sweep.
+var int   tm_lastSweepBullBar = -1
+var int   tm_lastSweepBearBar = -1
+var float tm_lastSweepBullPx  = na
+var float tm_lastSweepBearPx  = na
+
+if tm_sweepBull
+    tm_lastSweepBullBar := bar_index
+    tm_lastSweepBullPx  := low
+    f_pushEvent("SWEEP", "bull", bar_index, time, barstate.isconfirmed, math.max(tm_pdl, nz(tm_sessLo, tm_pdl)))
+if tm_sweepBear
+    tm_lastSweepBearBar := bar_index
+    tm_lastSweepBearPx  := high
+    f_pushEvent("SWEEP", "bear", bar_index, time, barstate.isconfirmed, math.min(tm_pdh, nz(tm_sessHi, tm_pdh)))
+
+// --- 3. BTC Leader Filter for ETH / Altcoin (Request 5) ----------------------
+bool tm_isBtcSelf = str.contains(syminfo.ticker, "BTC") or syminfo.ticker == "BTCUSDT" or syminfo.ticker == "BTCUSDT.P"
+bool tm_needBtcLeader = tm_btcLeaderOn and not tm_isBtcSelf and (tm_assetMode == "ETH" or tm_assetMode == "Liquid Altcoin" or tm_assetMode == "High-Risk Altcoin" or tm_assetMode == "Auto")
+
+[btcClose, btcEmaF, btcRsi, btcAtr] = request.security(tm_btcTicker, timeframe.period, [close[1], ta.ema(close, 20)[1], ta.rsi(close, 14)[1], ta.atr(14)[1]], lookahead = barmerge.lookahead_on, gaps = barmerge.gaps_off)
+
+bool btcDumping = tm_needBtcLeader and not na(btcClose) and not na(btcEmaF) and not na(btcAtr) and (btcClose < btcEmaF - tm_btcImpulseAtr * btcAtr or btcRsi < 32.0)
+bool btcPumping = tm_needBtcLeader and not na(btcClose) and not na(btcEmaF) and not na(btcAtr) and (btcClose > btcEmaF + tm_btcImpulseAtr * btcAtr or btcRsi > 68.0)
+
+// BTC Gate: Altcoin LONG bị chặn nếu BTC đang xả mạnh; Altcoin SHORT bị chặn nếu BTC đang bơm mạnh
+bool tm_btcLongOk  = not tm_needBtcLeader or not btcDumping
+bool tm_btcShortOk = not tm_needBtcLeader or not btcPumping
+
+// --- 4. Weekend Low-Liquidity Filter (Crypto) --------------------------------
+bool tm_isWeekend = dayofweek == dayofweek.saturday or dayofweek == dayofweek.sunday
+bool tm_isCrypto = syminfo.type == "crypto" or tm_assetMode == "BTC" or tm_assetMode == "ETH" or tm_assetMode == "Liquid Altcoin" or tm_assetMode == "High-Risk Altcoin" or str.contains(syminfo.ticker, "USDT")
+bool tm_weekendBlocked = tm_weekendFilter and tm_isCrypto and tm_isWeekend and (tm_volRatio < 0.8 or tm_atrPct < 0.6)
+
+// =============================================================================
+//  L6 - ROOM-TO-LEFT / OBSTACLE GATE & ELIGIBILITY EVALUATOR (v2.0)
+// =============================================================================
+
+// --- 1. Nearest Barrier / Obstacle Calculation (Room-to-Left) ----------------
+float tm_nearestRes = na
+float tm_nearestSup = na
+
+// Scan unbroken S/R zones
+for z in sr_zones
+    if not z.broken
+        if z.side == -1 and z.bot > close
+            tm_nearestRes := na(tm_nearestRes) ? z.bot : math.min(tm_nearestRes, z.bot)
+        if z.side == 1 and z.top < close
+            tm_nearestSup := na(tm_nearestSup) ? z.top : math.max(tm_nearestSup, z.top)
+
+// v2.1 Bug 2: FVGs are intentionally NOT obstacles for this gate. A fresh FVG
+// can sit within a fraction of an ATR of price and would recreate the same
+// false blocks as the old 5-bar swing scan. FVGs are still used as LIMIT entry
+// locations in the plan builder.
+
+// Scan active Order Blocks
+for o in tm_obs
+    if not o.mitigated
+        if o.side == -1 and o.bot > close
+            tm_nearestRes := na(tm_nearestRes) ? o.bot : math.min(tm_nearestRes, o.bot)
+        if o.side == 1 and o.top < close
+            tm_nearestSup := na(tm_nearestSup) ? o.top : math.max(tm_nearestSup, o.top)
+
+// Factor in PDH / PDL and PWH / PWL only when sufficiently distant from entry (> 0.3 * tm_atr)
+float tm_minObsDist = nz(tm_atr, close * 0.01) * 0.3
+if not na(tm_pdh) and tm_pdh > close and (tm_pdh - close) >= tm_minObsDist
+    tm_nearestRes := na(tm_nearestRes) ? tm_pdh : math.min(tm_nearestRes, tm_pdh)
+if not na(tm_pdl) and tm_pdl < close and (close - tm_pdl) >= tm_minObsDist
+    tm_nearestSup := na(tm_nearestSup) ? tm_pdl : math.max(tm_nearestSup, tm_pdl)
+
+if not na(tm_pwh) and tm_pwh > close and (tm_pwh - close) >= tm_minObsDist
+    tm_nearestRes := na(tm_nearestRes) ? tm_pwh : math.min(tm_nearestRes, tm_pwh)
+if not na(tm_pwl) and tm_pwl < close and (close - tm_pwl) >= tm_minObsDist
+    tm_nearestSup := na(tm_nearestSup) ? tm_pwl : math.max(tm_nearestSup, tm_pwl)
+
+// Distance to Obstacle vs Target Distance to TP1
+float tm_estDistTp1 = nz(tm_atr, close * 0.01) * tm_sl_atrMul * tm_rr1
+
+float tm_distToRes = not na(tm_nearestRes) ? tm_nearestRes - close : na
+float tm_distToSup = not na(tm_nearestSup) ? close - tm_nearestSup : na
+
+bool tm_obstacleBlockedLong  = tm_gate_obstacle and not na(tm_distToRes) and tm_distToRes < (tm_estDistTp1 * tm_obstacleBuffer)
+bool tm_obstacleBlockedShort = tm_gate_obstacle and not na(tm_distToSup) and tm_distToSup < (tm_estDistTp1 * tm_obstacleBuffer)
+
+// --- 2. Smart Eligibility Gates Evaluation -----------------------------------
+// v2.1: every blocker produces a standardized reason code. `rsn` keeps the
+// highest-priority blocker (stable order, used by the compact dashboard), while
+// `mask` keeps ALL active blockers for the Advanced dashboard and alert payload.
+// Score/quality never appears here: gates are independent of confidence.
+f_evaluateGates(int dir) =>
+    bool   regimeOk   = true
+    bool   mtfOk      = true
+    bool   btcOk      = true
+    bool   obstacleOk = true
+    bool   overextOk  = true
+    bool   circuitOk  = true
+    string rsn        = "OK"
+    string mask       = ""
+
+    // 1. Regime Gate: no breakout entries in CHOPPY/SQUEEZE, and no buying the
+    // upper half / selling the lower half of a RANGING box.
+    bool regimeBlocked = false
+    if tm_gate_regime and tm_regime.code == -1
+        regimeBlocked := true
+    else if tm_gate_regime and tm_regime.code == 0
+        if not na(tm_nearestRes) and not na(tm_nearestSup)
+            float rangeMid = (tm_nearestRes + tm_nearestSup) * 0.5
+            if dir == 1 and close > rangeMid
+                regimeBlocked := true
+            if dir == -1 and close < rangeMid
+                regimeBlocked := true
+    if regimeBlocked
+        regimeOk := false
+        rsn      := "BLOCKED_REGIME"
+        mask     := f_tmBlockers(mask, "BLOCKED_REGIME")
+
+    // 2. MTF hierarchy + Context veto + BTC leader
+    bool setupOk = not tm_htfFilter or not tm_tfHierarchyOk or tm_setupDir == 0 or tm_setupDir == dir
+    bool vetoCtx = tm_htfVetoOn and tm_tfHierarchyOk and tm_ctxDir != 0 and tm_ctxDir != dir
+    mtfOk := setupOk and not vetoCtx
+    if not mtfOk
+        if rsn == "OK"
+            rsn := "BLOCKED_MTF"
+        mask := f_tmBlockers(mask, "BLOCKED_MTF")
+
+    btcOk := dir == 1 ? tm_btcLongOk : dir == -1 ? tm_btcShortOk : true
+    if not btcOk
+        string btcCode = dir == 1 ? "BTC_DUMPING_VETO" : "BTC_PUMPING_VETO"
+        if rsn == "OK"
+            rsn := btcCode
+        mask := f_tmBlockers(mask, btcCode)
+
+    // 3. Obstacle Gate (Room-to-Left)
+    obstacleOk := dir == 1 ? not tm_obstacleBlockedLong : dir == -1 ? not tm_obstacleBlockedShort : true
+    if not obstacleOk
+        if rsn == "OK"
+            rsn := "BLOCKED_OBSTACLE"
+        mask := f_tmBlockers(mask, "BLOCKED_OBSTACLE")
+
+    // 4. Overextension Gate (market entries only; Auto mode converts to limit)
+    overextOk := not tm_gate_overext or not tm_isOverextended or tm_entryMode != "Market on Confirm"
+    if not overextOk
+        if rsn == "OK"
+            rsn := "BLOCKED_OVEREXTENSION"
+        mask := f_tmBlockers(mask, "BLOCKED_OVEREXTENSION")
+
+    // 5. Weekend / Low Liquidity Filter
+    if tm_weekendBlocked
+        circuitOk := false
+        if rsn == "OK"
+            rsn := "BLOCKED_LIQUIDITY"
+        mask := f_tmBlockers(mask, "BLOCKED_LIQUIDITY")
+
+    bool allPassed = regimeOk and mtfOk and btcOk and obstacleOk and overextOk and circuitOk
+    GateStatus.new(regimeOk, mtfOk, btcOk, obstacleOk, overextOk, circuitOk, allPassed, rsn, mask)
+
+// =============================================================================
+//  L7 - DIRECTION-AWARE SCORING ENGINE (v2.1)
+// =============================================================================
+//  Roadmap v2.1 P0: the v2.0 engine mapped one signed raw score to a 0-100
+//  quality score (score100 = 50 + raw * 50) and then compared it to a single
+//  no-trade threshold. Bearish evidence therefore produced a LOW score that
+//  could never pass the quality gate, so SHORT setups were blocked by design.
+//
+//  Contract implemented here:
+//    1. Every group emits a signed value f in [-1, 1] (direction + magnitude).
+//    2. LONG consumes max(f, 0), SHORT consumes max(-f, 0): identical weights,
+//       identical scale, identical thresholds.
+//    3. Side score = 100 * weightedSupport / enabledDirectionalWeight, so a
+//       neutral group dilutes BOTH sides and cannot favour one of them.
+//    4. Direction needs a minimum side score and a margin; otherwise the state
+//       is NO_DIRECTION / AMBIGUOUS_SETUP and no side is forced.
+//    5. Regime/volatility is not a directional feature: it drives mode + gates.
+//       No hidden "choppy damping" multiplier that would make scores
+//       incomparable between regimes.
+// =============================================================================
+
+string tm_scoreVersion    = "2.1"
+string tm_scoreFeatureSet = "structure+location+trend+momentum+volume+mtf"
+
+// --- 1. Normalized Group Scores [-1.0 to +1.0] -------------------------------
+float tm_gTrend  = tm_trendScore
+float tm_gStruct = (tm_bosUp or tm_chochUp or tm_mssUp) ? 1.0 : (tm_bosDown or tm_chochDown or tm_mssDown) ? -1.0 : float(tm_trend) * 0.5
+float tm_gLiq    = tm_sweepBull ? 1.0 : tm_sweepBear ? -1.0 : tm_retestBull ? 0.7 : tm_retestBear ? -0.7 : 0.0
+float tm_gLoc    = tm_vwapScore
+float tm_gSr     = f_nearSupport(sr_zones, tm_atr) ? 1.0 : f_nearResistance(sr_zones, tm_atr) ? -1.0 : not na(tm_nearFvgBullPx) ? 0.8 : not na(tm_nearFvgBearPx) ? -0.8 : 0.0
+float tm_gCandle = tm_cpScore
+float tm_gVolume = tm_volumeScore
+float tm_gMom    = tm_momScore
+float tm_gSess   = (close >= open ? 1.0 : -1.0) * (tm_cryptoSessionNeutral ? 0.0 : 0.5)
+float tm_gMtf    = tm_gMtfBias
+
+// --- 2. Dynamic Regime-Adaptive Weighting ------------------------------------
+// Regime only re-weights DIRECTIONAL evidence. It never flips a sign and never
+// adds a one-sided bonus.
+float curW_trend  = tm_w_trend
+float curW_struct = tm_w_struct
+float curW_liq    = tm_w_liq
+float curW_loc    = tm_w_loc
+float curW_sr     = tm_w_sr
+float curW_mom    = tm_w_mom
+
+if tm_regime.code == 1 // TRENDING REGIME
+    curW_trend  := tm_w_trend  * 1.30
+    curW_struct := tm_w_struct * 1.25
+    curW_mom    := tm_w_mom    * 1.20
+    curW_sr     := tm_w_sr     * 0.60
+else if tm_regime.code == 0 // RANGING REGIME
+    curW_trend  := tm_w_trend  * 0.60
+    curW_sr     := tm_w_sr     * 1.30
+    curW_liq    := tm_w_liq    * 1.30
+    curW_loc    := tm_w_loc    * 1.20
+else if tm_regime.code == -1 // CHOPPY SQUEEZE
+    curW_trend  := tm_w_trend  * 0.50
+    curW_struct := tm_w_struct * 0.50
+    curW_mom    := tm_w_mom    * 0.50
+
+// --- 3. Ablation Feature Config (v2.1 protocol A-E) --------------------------
+// A: Structure + Location. B: A + Trend/Momentum. C: B + Volume.
+// D: C + MTF/Session. E: full feature set.
+// Note: E is about FEATURES. Execution gates remain the explicit toggles in
+// "TM · Eligibility Gates" so an ablation cannot silently disarm safety rules.
+int tm_cfgCode = tm_ablationMode == "A (Structure + Location)" ? 1 : tm_ablationMode == "B (A + Trend/Momentum)" ? 2 : tm_ablationMode == "C (B + Volume)" ? 3 : tm_ablationMode == "D (C + MTF + Regime)" ? 4 : 5
+string tm_cfgName = tm_cfgCode == 1 ? "A" : tm_cfgCode == 2 ? "B" : tm_cfgCode == 3 ? "C" : tm_cfgCode == 4 ? "D" : "E"
+
+float cfgTrend  = tm_cfgCode >= 2 ? curW_trend : 0.0
+float cfgStruct = curW_struct
+float cfgLiq    = curW_liq
+float cfgLoc    = curW_loc
+float cfgSr     = curW_sr
+float cfgCandle = tm_w_candle
+float cfgVol    = tm_cfgCode >= 3 ? tm_w_vol : 0.0
+float cfgMom    = tm_cfgCode >= 2 ? curW_mom : 0.0
+float cfgSess   = tm_cfgCode >= 4 ? tm_w_sess : 0.0
+float cfgMtf    = tm_cfgCode >= 4 ? tm_w_mtf : 0.0
+
+// --- 4. Symmetric Side Scores (0..100) ---------------------------------------
+float tm_wDirTotal = cfgTrend + cfgStruct + cfgLiq + cfgLoc + cfgSr + cfgCandle + cfgVol + cfgMom + cfgSess + cfgMtf
+
+float tm_longWeighted = cfgTrend  * f_tmLongPart(tm_gTrend) + cfgStruct * f_tmLongPart(tm_gStruct) + cfgLiq * f_tmLongPart(tm_gLiq) + cfgLoc * f_tmLongPart(tm_gLoc) + cfgSr * f_tmLongPart(tm_gSr) + cfgCandle * f_tmLongPart(tm_gCandle) + cfgVol * f_tmLongPart(tm_gVolume) + cfgMom * f_tmLongPart(tm_gMom) + cfgSess * f_tmLongPart(tm_gSess) + cfgMtf * f_tmLongPart(tm_gMtf)
+float tm_shortWeighted = cfgTrend * f_tmShortPart(tm_gTrend) + cfgStruct * f_tmShortPart(tm_gStruct) + cfgLiq * f_tmShortPart(tm_gLiq) + cfgLoc * f_tmShortPart(tm_gLoc) + cfgSr * f_tmShortPart(tm_gSr) + cfgCandle * f_tmShortPart(tm_gCandle) + cfgVol * f_tmShortPart(tm_gVolume) + cfgMom * f_tmShortPart(tm_gMom) + cfgSess * f_tmShortPart(tm_gSess) + cfgMtf * f_tmShortPart(tm_gMtf)
+
+int tm_longScore100  = f_tmSideScore(tm_longWeighted, tm_wDirTotal)
+int tm_shortScore100 = f_tmSideScore(tm_shortWeighted, tm_wDirTotal)
+
+// --- 5. Direction Selection (minimum side score + margin) --------------------
+bool   tm_longMinOk  = tm_longScore100 > tm_scr_noTrade
+bool   tm_shortMinOk = tm_shortScore100 > tm_scr_noTrade
+int    tm_scoreGap   = math.abs(tm_longScore100 - tm_shortScore100)
+string tm_directionCode = not (tm_longMinOk or tm_shortMinOk) ? "NO_DIRECTION" : tm_longMinOk and tm_shortMinOk and tm_scoreGap < tm_scoreMargin ? "AMBIGUOUS_SETUP" : "OK"
+int    tm_candidateDir  = tm_longMinOk and tm_longScore100 >= tm_shortScore100 ? 1 : tm_shortMinOk and tm_shortScore100 > tm_longScore100 ? -1 : 0
+int    tm_dir           = tm_directionCode == "OK" ? tm_candidateDir : 0
+
+// Backwards-compatible aliases used by the planner, state machine and visuals.
+// `tm_score100` now means "score of the selected side" (never a signed quality).
+int tm_score100 = tm_dir == 1 ? tm_longScore100 : tm_dir == -1 ? tm_shortScore100 : math.max(tm_longScore100, tm_shortScore100)
+
+// A directionless/ambiguous bar is not a tradeable quality, even when one side
+// happens to be strong. Report NO TRADE so the dashboard cannot show "A+"
+// next to NO_DIRECTION/AMBIGUOUS_SETUP.
+string tm_quality      = tm_directionCode != "OK" ? "NO TRADE" : f_tmLevelName(f_tmScoreLevel(tm_score100, tm_scr_noTrade, tm_scr_weak, tm_scr_setup, tm_scr_strong))
+int    tm_qualityLevel = tm_directionCode != "OK" ? 0 : f_tmScoreLevel(tm_score100, tm_scr_noTrade, tm_scr_weak, tm_scr_setup, tm_scr_strong)
+int    tm_minReqLevel  = f_tmMinLevel(tm_minQuality)
+bool   tm_okQuality    = tm_qualityLevel >= tm_minReqLevel
+
+// Single score-side gate code. Empty direction and low quality are DIFFERENT
+// states: "no setup" is not "blocked".
+string tm_scoreBlockCode = tm_directionCode != "OK" ? tm_directionCode : not tm_okQuality ? (tm_dir == 1 ? "BLOCKED_SCORE_LONG" : tm_dir == -1 ? "BLOCKED_SCORE_SHORT" : "NO_DIRECTION") : "OK"
+
+string tm_scoreMeta = "v" + tm_scoreVersion + "|cfg" + tm_cfgName + "|L" + str.tostring(tm_longScore100) + "|S" + str.tostring(tm_shortScore100) + "|m" + str.tostring(tm_scoreGap)
+
+// =============================================================================
+//  L7b - ENTRY MODES BY MARKET STATE (v2.1 Phase 3)
+// =============================================================================
+//  Each mode publishes: activation, confirmation, invalidation and expiry. The
+//  state machine only accepts a NEW trade when an enabled mode is ready AND its
+//  direction matches the direction-aware score. Modes never override risk gates.
+//
+//  A - Trend Pullback: trending regime, HTF not opposed, pullback into EMA/FVG/
+//      OB, then a close back in the trend direction.
+//  B - Liquidity Sweep Reversal: sweep of a tracked level, then a rejection /
+//      engulfing confirmation within a bounded window after the sweep.
+//  C - Range Mean-Reversion: RANGING regime, price at a range edge, rejection
+//      candle back inside the range. Disabled by default until validated OOS.
+// =============================================================================
+
+float tm_atrSafe = nz(tm_atr, close * 0.01)
+float tm_pbTol   = tm_atrSafe * tm_modePullTol
+float tm_rgTol   = tm_atrSafe * tm_modeRangeTol
+
+// --- Mode A: Trend Pullback --------------------------------------------------
+int  tm_modeADir   = tm_regime.code == 1 ? tm_regime.trendDir : 0
+bool tm_modeAMtfOk = tm_modeADir == 1 ? tm_ctxDir >= 0 and tm_setupDir >= 0 : tm_modeADir == -1 ? tm_ctxDir <= 0 and tm_setupDir <= 0 : false
+
+bool tm_modeAPullLong  = (low <= tm_emaF + tm_pbTol) or (not na(tm_nearFvgBullPx) and low <= tm_nearFvgBullPx + tm_pbTol) or (not na(tm_nearObBullPx) and low <= tm_nearObBullPx + tm_pbTol)
+bool tm_modeAPullShort = (high >= tm_emaF - tm_pbTol) or (not na(tm_nearFvgBearPx) and high >= tm_nearFvgBearPx - tm_pbTol) or (not na(tm_nearObBearPx) and high >= tm_nearObBearPx - tm_pbTol)
+bool tm_modeAConfirmLong  = close > open and close >= tm_emaF - tm_pbTol
+bool tm_modeAConfirmShort = close < open and close <= tm_emaF + tm_pbTol
+
+bool tm_modeAReadyLong  = tm_modeA_on and tm_modeADir == 1 and tm_modeAMtfOk and tm_modeAPullLong and tm_modeAConfirmLong
+bool tm_modeAReadyShort = tm_modeA_on and tm_modeADir == -1 and tm_modeAMtfOk and tm_modeAPullShort and tm_modeAConfirmShort
+
+// --- Mode B: Liquidity Sweep Reversal ---------------------------------------
+int tm_sweepAgeBull = tm_lastSweepBullBar >= 0 ? bar_index - tm_lastSweepBullBar : 999999
+int tm_sweepAgeBear = tm_lastSweepBearBar >= 0 ? bar_index - tm_lastSweepBearBar : 999999
+bool tm_sweepFreshBull = tm_sweepAgeBull <= tm_modeSweepBars and not na(tm_lastSweepBullPx)
+bool tm_sweepFreshBear = tm_sweepAgeBear <= tm_modeSweepBars and not na(tm_lastSweepBearPx)
+bool tm_modeBConfirmLong  = tm_bullPin or tm_bullEng or tm_bullRej
+bool tm_modeBConfirmShort = tm_bearPin or tm_bearEng or tm_bearRej
+
+bool tm_modeBReadyLong  = tm_modeB_on and tm_sweepFreshBull and tm_modeBConfirmLong and close > tm_lastSweepBullPx
+bool tm_modeBReadyShort = tm_modeB_on and tm_sweepFreshBear and tm_modeBConfirmShort and close < tm_lastSweepBearPx
+
+// Invalidation: price accepts beyond the swept extreme instead of rejecting it.
+bool tm_modeBInvalidLong  = tm_modeB_on and tm_sweepFreshBull and close < tm_lastSweepBullPx - 0.1 * tm_atrSafe
+bool tm_modeBInvalidShort = tm_modeB_on and tm_sweepFreshBear and close > tm_lastSweepBearPx + 0.1 * tm_atrSafe
+
+// --- Mode C: Range Mean-Reversion -------------------------------------------
+bool tm_rangeBoxOk = tm_regime.code == 0 and not na(tm_nearestRes) and not na(tm_nearestSup) and (tm_nearestRes - tm_nearestSup) > tm_atrSafe
+bool tm_modeCNearSup = tm_rangeBoxOk and close <= tm_nearestSup + tm_rgTol and close >= tm_nearestSup - tm_atrSafe
+bool tm_modeCNearRes = tm_rangeBoxOk and close >= tm_nearestRes - tm_rgTol and close <= tm_nearestRes + tm_atrSafe
+bool tm_modeCReadyLong  = tm_modeC_on and tm_modeCNearSup and (tm_bullPin or tm_bullEng or tm_bullRej) and close > open
+bool tm_modeCReadyShort = tm_modeC_on and tm_modeCNearRes and (tm_bearPin or tm_bearEng or tm_bearRej) and close < open
+
+// --- Mode Selection (A > B > C) ---------------------------------------------
+// Priority is deterministic and documented so the same bar always resolves to
+// the same mode. C stays opt-in until the range classifier is validated OOS.
+int    tm_modeDir    = 0
+string tm_activeMode = "NONE"
+
+if tm_modeAReadyLong
+    tm_modeDir    := 1
+    tm_activeMode := "A_TREND_PULLBACK"
+else if tm_modeAReadyShort
+    tm_modeDir    := -1
+    tm_activeMode := "A_TREND_PULLBACK"
+else if tm_modeBReadyLong
+    tm_modeDir    := 1
+    tm_activeMode := "B_LIQUIDITY_SWEEP"
+else if tm_modeBReadyShort
+    tm_modeDir    := -1
+    tm_activeMode := "B_LIQUIDITY_SWEEP"
+else if tm_modeCReadyLong
+    tm_modeDir    := 1
+    tm_activeMode := "C_RANGE_REVERSION"
+else if tm_modeCReadyShort
+    tm_modeDir    := -1
+    tm_activeMode := "C_RANGE_REVERSION"
+
+bool tm_modeReady = tm_modeDir != 0
+
+// Why no mode is active (stable priority, used by the dashboard/alerts).
+bool tm_modeAwaitConfirm = tm_modeReady or tm_modeAPullLong or tm_modeAPullShort or tm_sweepFreshBull or tm_sweepFreshBear or tm_modeCNearSup or tm_modeCNearRes
+string tm_modeReason = not tm_modeFilterOn ? "OK" : tm_modeReady ? (tm_activeMode == "A_TREND_PULLBACK" ? "MODE_A_PULLBACK" : tm_activeMode == "B_LIQUIDITY_SWEEP" ? "MODE_B_SWEEP" : "MODE_C_RANGE") : tm_modeBInvalidLong or tm_modeBInvalidShort ? "MODE_INVALIDATED" : tm_modeAwaitConfirm ? "WAIT_CONFIRMATION" : tm_modeADir != 0 ? "WAIT_PULLBACK" : "NO_SETUP"
+
+// The mode is a gate, not a score bonus: a great score cannot bypass it.
+bool tm_modeGateOk = not tm_modeFilterOn or (tm_modeReady and tm_modeDir == tm_dir)
+
+// =============================================================================
+//  L8 - PLAN BUILDER & DYNAMIC STATE MACHINE (v2.1)
+// =============================================================================
+//  v2.1 changes:
+//    * RR gate names the target it evaluates (TP2) in the plan, dashboard and
+//      alert payload, and emits BLOCKED_RR / BLOCKED_NET_RR codes.
+//    * Every rejection is a standardized reason code; the full blocker set is
+//      kept separately so the Advanced dashboard/alert can show all causes.
+//    * Entry modes (A/B/C) are an independent gate: confidence cannot bypass
+//      an inactive mode, and a mode cannot bypass risk.
+//    * Lifecycle counters distinguish candidate -> eligible -> pending ->
+//      filled -> closed, so a blocked setup is never reported as a trade.
+// =============================================================================
+
+// --- 1. Comprehensive Trade Plan Builder -------------------------------------
+f_buildTMPlan2(int dir) =>
+    float a     = tm_atr
+    bool  atrOk = not na(a) and a > 0.0
+    bool  dirOk = dir == 1 or dir == -1
+
+    // Determine Entry Type (Market vs Pullback Limit)
+    string ordType = "MARKET"
+    if tm_entryMode == "Pullback Limit (Strict)"
+        ordType := "LIMIT"
+    else if tm_entryMode == "Auto (Adaptive)"
+        if tm_isOverextended
+            ordType := "LIMIT"
+        else
+            ordType := "MARKET"
+
+    // Limit Price Selection
+    float limPx = na
+    if dir == 1
+        limPx := tm_limitSource == "50% FVG" and not na(tm_nearFvgBullPx) ? tm_nearFvgBullPx : tm_limitSource == "Order Block Edge" and not na(tm_nearObBullPx) ? tm_nearObBullPx : tm_emaF
+        // Safety: a buy limit must sit at or below the current close
+        limPx := math.min(limPx, close - syminfo.mintick)
+    else if dir == -1
+        limPx := tm_limitSource == "50% FVG" and not na(tm_nearFvgBearPx) ? tm_nearFvgBearPx : tm_limitSource == "Order Block Edge" and not na(tm_nearObBearPx) ? tm_nearObBearPx : tm_emaF
+        // Safety: a sell limit must sit at or above the current close
+        limPx := math.max(limPx, close + syminfo.mintick)
+
+    float entryPx = ordType == "LIMIT" ? limPx : close
+
+    // SL Distance & Anchoring
+    float pad   = a * tm_sl_padAtr
+    float swing = dir == 1 ? nz(tm_swingLo, low) : nz(tm_swingHi, high)
+    float sDist = dir == 1 ? (entryPx - swing) + pad : (swing - entryPx) + pad
+    float aDist = a * tm_sl_atrMul
+    float base  = (aDist + sDist) * 0.5
+    float dist  = f_clamp(nz(base, aDist), a * tm_sl_minAtr, a * tm_sl_maxAtr)
+
+    float slPx = entryPx - dir * dist
+    float risk = dist
+
+    // Targets: TP1 (partial + auto-BE), TP2 (standard, evaluated vs minRR), TP3 (runner)
+    float r1  = tm_rr1
+    float r2  = math.max(tm_rr2, r1 + 0.5)
+    float r3  = math.max(tm_rr3, r2 + 1.0)
+    float tp1 = entryPx + dir * r1 * risk
+    float tp2 = entryPx + dir * r2 * risk
+    float tp3 = entryPx + dir * r3 * risk
+
+    // RR gate is evaluated at TP2, never at TP1 (partial target).
+    float evalRR = r2
+    bool  rrOk   = tm_rrMin <= 0.0 or evalRR >= tm_rrMin
+    bool  slOk   = dist > 0.0 and not na(slPx) and (dir == 1 ? slPx < entryPx : slPx > entryPx)
+    bool  tpOk   = not na(tp1) and not na(tp2) and not na(tp3) and (dir == 1 ? (entryPx < tp1 and tp1 < tp2 and tp2 < tp3) : (entryPx > tp1 and tp1 > tp2 and tp2 > tp3))
+
+    // Futures Position Sizing & Margin
+    float riskUsd   = tm_risk_equity * (tm_risk_pct / 100.0)
+    float posSize   = dist > 0.0 ? riskUsd / dist : 0.0
+    float notional  = posSize * entryPx
+    float effLev    = tm_risk_equity > 0.0 ? notional / tm_risk_equity : 0.0
+    float marginReq = tm_risk_maxLev > 0.0 ? notional / tm_risk_maxLev : notional
+
+    // Estimated Liquidation Price
+    float levForLiq = math.max(effLev, 1.0)
+    float liqLong   = entryPx * math.max(0.0, 1.0 - (1.0 / levForLiq) + tm_risk_mmr)
+    float liqShort  = entryPx * (1.0 + (1.0 / levForLiq) - tm_risk_mmr)
+    float liqPrice  = dir == 1 ? liqLong : dir == -1 ? liqShort : na
+
+    bool  liqOk     = not tm_gate_risk or (dir == 1 ? slPx > liqPrice : slPx < liqPrice)
+    bool  levOk     = not tm_gate_risk or tm_risk_maxLev <= 0.0 or effLev <= (tm_risk_maxLev * 1.05)
+
+    // Friction & Net RR
+    float feeSlipUsd = notional * (tm_risk_feeSlipPct / 100.0)
+    float netProfit  = (evalRR * riskUsd) - feeSlipUsd
+    float netRisk    = riskUsd + feeSlipUsd
+    float netRR      = netRisk > 0.0 ? netProfit / netRisk : evalRR
+    // Net RR is compared against the SAME minimum target, after fees/slippage.
+    // (v2.0 used minRR * 0.70, which hid the cost of the trade.)
+    bool  netRrOk    = tm_rrMin <= 0.0 or netRR >= tm_rrMin
+
+    // Standardized plan reason codes (v2.1 section 11.3).
+    string rsn = not atrOk ? "BLOCKED_NO_ATR" : not dirOk ? "NO_DIRECTION" : not slOk ? "BLOCKED_BAD_SL" : not tpOk ? "BLOCKED_BAD_TP" : not rrOk ? "BLOCKED_RR" : not levOk ? "BLOCKED_MAX_LEV" : not liqOk ? "BLOCKED_LIQUIDATION_RISK" : not netRrOk ? "BLOCKED_NET_RR" : "VALID"
+    bool  valid = atrOk and dirOk and slOk and tpOk and rrOk and levOk and liqOk and netRrOk
+
+    TMPlan2.new(valid, dir, ordType, entryPx, limPx, slPx, tp1, tp2, tp3, risk, evalRR, posSize, notional, effLev, marginReq, liqPrice, netRR, "TP2", rsn)
+
+tm_plan2 = f_buildTMPlan2(tm_dir)
+
+// --- 2. Persistent State & Counters ------------------------------------------
+var int    tm_posStage    = TM2_STAGE_IDLE
+var int    tm_posDir      = 0
+var string tm_posType     = "MARKET"
+var string tm_posMode     = ""
+var float  tm_posEntry    = na
+var float  tm_posLimit    = na
+var float  tm_posSl       = na
+var float  tm_posTp1      = na
+var float  tm_posTp2      = na
+var float  tm_posTp3      = na
+var float  tm_posRisk     = na
+var int    tm_posBars     = 0
+var int    tm_posBar      = na
+var float  tm_posMaxFavR  = 0.0
+var string tm_posSigId    = ""
+var bool   tm_needReset   = false
+var int    tm_exitReason  = TM2_EXIT_NONE
+
+var int tm_dayCount     = 0
+var int tm_barsSince    = 999999
+var int tm_consecLosses = 0
+tm_barsSince += 1
+
+if f_isNewDay()
+    tm_dayCount     := 0
+    tm_consecLosses := 0
+
+// Performance Tracking (separates TP1 hit rate from net win rate)
+var int   tm_statTotalTrades    = 0
+var int   tm_statTp1Hits        = 0
+var int   tm_statNetWins        = 0
+var int   tm_statBeSaves        = 0
+var int   tm_statFullLosses     = 0
+var int   tm_statTimeouts       = 0
+var int   tm_statTimeDecays     = 0
+var float tm_statRealizedRSum   = 0.0
+
+// Lifecycle funnel counters (v2.1 section 13.1)
+var int tm_statCandidates = 0
+var int tm_statEligible   = 0
+var int tm_statPendingN   = 0
+var int tm_statFilledN    = 0
+var int tm_statClosedN    = 0
+var bool tm_prevCandidate = false
+var bool tm_prevEligible  = false
+
+// --- 3. Gate Status & Eligibility --------------------------------------------
+tm_gateStatus = f_evaluateGates(tm_dir)
+
+bool tm_okBar     = tm_confirmOnly ? barstate.isconfirmed : true
+bool tm_okCool    = tm_barsSince >= tm_coolBars
+bool tm_okDay     = tm_dayCount < tm_maxDay
+bool tm_okDir     = tm_dir != 0
+bool tm_okCircuit = not tm_gate_circuit or tm_consecLosses < tm_risk_maxLosses
+bool tm_okPosition = tm_posStage == TM2_STAGE_IDLE
+
+bool tm_tradeEligible = tm_okDir and tm_okQuality and tm_gateStatus.allPassed and tm_modeGateOk and tm_okCool and tm_okDay and tm_okCircuit and tm_okPosition
+bool tm_riskEligible  = tm_plan2.valid
+bool tm_signal        = tm_okBar and tm_tradeEligible and tm_riskEligible
+
+// Aggregated blocker mask for the Advanced dashboard + alert payload.
+string tm_blockMask = ""
+if tm_scoreBlockCode != "OK"
+    tm_blockMask := f_tmBlockers(tm_blockMask, tm_scoreBlockCode)
+if not tm_gateStatus.allPassed
+    tm_blockMask := f_tmBlockers(tm_blockMask, tm_gateStatus.blockMask)
+if not tm_modeGateOk
+    tm_blockMask := f_tmBlockers(tm_blockMask, tm_modeReason)
+if not tm_okCool
+    tm_blockMask := f_tmBlockers(tm_blockMask, "BLOCKED_COOLDOWN")
+if not tm_okDay
+    tm_blockMask := f_tmBlockers(tm_blockMask, "BLOCKED_DAILY_LIMIT")
+if not tm_okCircuit
+    tm_blockMask := f_tmBlockers(tm_blockMask, "BLOCKED_CIRCUIT_BREAKER")
+if not tm_okPosition
+    tm_blockMask := f_tmBlockers(tm_blockMask, "BLOCKED_POSITION_OPEN")
+if tm_dir != 0 and not tm_riskEligible
+    tm_blockMask := f_tmBlockers(tm_blockMask, tm_plan2.reason)
+
+// Stable priority order for the compact "Top Block Reason" row.
+string tm_noTradeReason = tm_scoreBlockCode != "OK" ? tm_scoreBlockCode : not tm_gateStatus.regimeOk ? "BLOCKED_REGIME" : not tm_gateStatus.mtfOk ? "BLOCKED_MTF" : not tm_gateStatus.btcOk ? (tm_dir == 1 ? "BTC_DUMPING_VETO" : "BTC_PUMPING_VETO") : not tm_gateStatus.obstacleOk ? "BLOCKED_OBSTACLE" : not tm_gateStatus.overextOk ? "BLOCKED_OVEREXTENSION" : not tm_modeGateOk ? tm_modeReason : not tm_okCool ? "BLOCKED_COOLDOWN" : not tm_okDay ? "BLOCKED_DAILY_LIMIT" : not tm_okCircuit ? "BLOCKED_CIRCUIT_BREAKER" : not tm_okPosition ? "BLOCKED_POSITION_OPEN" : not tm_riskEligible ? tm_plan2.reason : "OK"
+
+// Candidate = a direction with enough side strength to be worth a plan.
+// Eligible = candidate that survived every gate (still not necessarily filled).
+bool tm_candidateNow = tm_okBar and tm_scoreBlockCode == "OK" and tm_okDir
+if tm_candidateNow and not tm_prevCandidate
+    tm_statCandidates += 1
+tm_prevCandidate := tm_candidateNow
+
+bool tm_eligibleNow = tm_okBar and tm_tradeEligible and tm_riskEligible
+if tm_eligibleNow and not tm_prevEligible
+    tm_statEligible += 1
+tm_prevEligible := tm_eligibleNow
+
+// --- 4. Event Flags for Visuals & Alerts -------------------------------------
+var bool tm_evEntry    = false
+var bool tm_evPending  = false
+var bool tm_evFilled   = false
+var bool tm_evCancel   = false
+var int  tm_evTp       = 0
+var bool tm_evSl       = false
+var bool tm_evBeMoved  = false
+var bool tm_evTrail    = false
+var bool tm_evTimeout  = false
+var bool tm_evDecay    = false
+var bool tm_evClose    = false
+
+tm_evEntry   := false
+tm_evPending := false
+tm_evFilled  := false
+tm_evCancel  := false
+tm_evTp      := 0
+tm_evSl      := false
+tm_evBeMoved := false
+tm_evTrail   := false
+tm_evTimeout := false
+tm_evDecay   := false
+tm_evClose   := false
+
+// --- 5. Dynamic State Machine ------------------------------------------------
+// 1. Deferred reset from the previous bar (keeps the exit label readable).
+if tm_needReset
+    tm_needReset  := false
+    tm_posStage   := TM2_STAGE_IDLE
+    tm_posDir     := 0
+    tm_posType    := "MARKET"
+    tm_posMode    := ""
+    tm_posEntry   := na
+    tm_posLimit   := na
+    tm_posSl      := na
+    tm_posTp1     := na
+    tm_posTp2     := na
+    tm_posTp3     := na
+    tm_posRisk    := na
+    tm_posBars    := 0
+    tm_posBar     := na
+    tm_posMaxFavR := 0.0
+    tm_exitReason := TM2_EXIT_NONE
+
+// 2. Manage PENDING_LIMIT orders
+if tm_posStage == TM2_STAGE_PENDING_LIMIT
+    tm_posBars += 1
+    bool isUp = tm_posDir == 1
+    bool filled = isUp ? low <= tm_posLimit : high >= tm_posLimit
+    bool reachedTp1Early = isUp ? high >= tm_posTp1 : low <= tm_posTp1
+
+    if filled
+        tm_posStage := TM2_STAGE_OPEN
+        tm_posEntry := tm_posLimit
+        tm_posBar   := bar_index
+        tm_posBars  := 0
+        tm_evFilled := true
+        tm_statFilledN += 1
+    else if tm_limitCancelOnTp1 and reachedTp1Early
+        // Missed move: price reached TP1 before filling the limit.
+        tm_exitReason := TM2_CANCEL_MISSED
+        tm_evCancel   := true
+        tm_needReset  := true
+    else if tm_posBars >= tm_limitCancelBars
+        // Expired limit order after K bars.
+        tm_exitReason := TM2_CANCEL_TIMEOUT
+        tm_evCancel   := true
+        tm_needReset  := true
+
+// 3. Manage Active OPEN Position (TP1 BE, TP2 trail, time-decay, timeout)
+if tm_posStage >= TM2_STAGE_OPEN
+    tm_posBars += 1
+    bool  isUp = tm_posDir == 1
+    float curFavR = isUp ? (high - tm_posEntry) / tm_posRisk : (tm_posEntry - low) / tm_posRisk
+    tm_posMaxFavR := math.max(tm_posMaxFavR, curFavR)
+
+    float t1 = tm_posStage < TM2_STAGE_TP1_BE ? tm_posTp1 : na
+    float t2 = tm_posStage < TM2_STAGE_TP2_TRAIL ? tm_posTp2 : na
+    float t3 = tm_posTp3
+
+    // A limit that fills on this bar may have filled AFTER the high/low that
+    // touched a target. Without intrabar data, counting a TP on the fill bar is
+    // optimistic, so targets are only evaluated from the next bar onward. A stop
+    // on the fill bar is still honored (worst-case assumption).
+    bool tm_fillBar = tm_posBar == bar_index
+    bool hitSl = isUp ? low <= tm_posSl : high >= tm_posSl
+    bool hit1  = not tm_fillBar and not na(t1) and (isUp ? high >= t1 : low <= t1)
+    bool hit2  = not tm_fillBar and not na(t2) and (isUp ? high >= t2 : low <= t2)
+    bool hit3  = not tm_fillBar and not na(t3) and (isUp ? high >= t3 : low <= t3)
+    bool hitAnyTp = hit1 or hit2 or hit3
+
+    // TP1 hit rate counts a trade once, only when TP1 was genuinely reachable
+    // and the conservative SL-first rule did not fire on the same bar.
+    if hitAnyTp and tm_posStage == TM2_STAGE_OPEN and not hitSl
+        tm_statTp1Hits += 1
+
+    bool closed = false
+    float realizedTradeR = 0.0
+
+    // Conservative execution: if a bar hits both SL and TP, SL takes precedence.
+    if hitSl and hitAnyTp
+        closed := true
+        tm_evSl := true
+        tm_evClose := true
+        if tm_posStage == TM2_STAGE_OPEN
+            tm_exitReason := TM2_EXIT_SL
+            realizedTradeR := -1.0
+            tm_statFullLosses += 1
+            tm_consecLosses   += 1
+        else if tm_posStage == TM2_STAGE_TP1_BE
+            tm_exitReason := TM2_EXIT_BREAKEVEN
+            // 40% at TP1 + 60% at BE (0R) minus roundtrip fee buffer
+            realizedTradeR := 0.40 * tm_rr1 - (tm_risk_feeSlipPct * 2.0 / 100.0)
+            tm_statBeSaves += 1
+            tm_statNetWins += 1
+            tm_consecLosses := 0
+        else
+            tm_exitReason := TM2_EXIT_TRAIL
+            realizedTradeR := 0.40 * tm_rr1 + 0.40 * tm_rr2 - (tm_risk_feeSlipPct * 2.0 / 100.0)
+            tm_statNetWins += 1
+            tm_consecLosses := 0
+    else if hitSl
+        closed := true
+        tm_evSl := true
+        tm_evClose := true
+        if tm_posStage == TM2_STAGE_OPEN
+            tm_exitReason := TM2_EXIT_SL
+            realizedTradeR := -1.0
+            tm_statFullLosses += 1
+            tm_consecLosses   += 1
+        else if tm_posStage == TM2_STAGE_TP1_BE
+            tm_exitReason := TM2_EXIT_BREAKEVEN
+            realizedTradeR := 0.40 * tm_rr1 - (tm_risk_feeSlipPct * 2.0 / 100.0)
+            tm_statBeSaves += 1
+            tm_statNetWins += 1
+            tm_consecLosses := 0
+        else
+            tm_exitReason := TM2_EXIT_TRAIL
+            realizedTradeR := 0.40 * tm_rr1 + 0.40 * tm_rr2 - (tm_risk_feeSlipPct * 2.0 / 100.0)
+            tm_statNetWins += 1
+            tm_consecLosses := 0
+    else if hit3
+        closed := true
+        tm_evTp := 3
+        tm_evClose := true
+        tm_exitReason := TM2_EXIT_TP3
+        realizedTradeR := 0.40 * tm_rr1 + 0.40 * tm_rr2 + 0.20 * tm_rr3
+        tm_statNetWins += 1
+        tm_consecLosses := 0
+    else if hit2
+        tm_evTp := 2
+        tm_posStage := TM2_STAGE_TP2_TRAIL
+        // Lock TP1 as the structural base for the trail
+        tm_posSl := tm_posTp1
+        tm_evTrail := true
+    else if hit1
+        tm_evTp := 1
+        tm_posStage := TM2_STAGE_TP1_BE
+        // Auto Break-Even: move SL to entry +/- fee buffer
+        if tm_autoBeOn
+            tm_posSl := tm_posEntry + tm_posDir * tm_atr * tm_beOffsetAtr
+            tm_evBeMoved := true
+
+    // Dynamic trailing stop in TP2 stage
+    if not closed and tm_posStage == TM2_STAGE_TP2_TRAIL and tm_trailOn
+        float trailLvl = isUp ? high[1] - tm_trailDistAtr * tm_atr : low[1] + tm_trailDistAtr * tm_atr
+        tm_posSl := isUp ? math.max(tm_posSl, trailLvl) : math.min(tm_posSl, trailLvl)
+
+    // Time-Decay / Stagnation exit
+    if not closed and tm_timeDecayOn and tm_posStage == TM2_STAGE_OPEN and tm_posBars >= tm_stagnantBars
+        if tm_posMaxFavR < 0.3 and tm_regime.adx < tm_regimeAdxTrending
+            closed := true
+            tm_evDecay := true
+            tm_evClose := true
+            tm_exitReason := TM2_EXIT_TIMEDECAY
+            tm_statTimeDecays += 1
+            realizedTradeR := (close - tm_posEntry) * tm_posDir / tm_posRisk
+            if realizedTradeR > 0
+                tm_statNetWins += 1
+                tm_consecLosses := 0
+            else
+                tm_consecLosses += 1
+
+    // Max-hold timeout
+    if not closed and tm_posBars >= tm_maxHoldBars
+        closed := true
+        tm_evTimeout := true
+        tm_evClose := true
+        tm_exitReason := TM2_EXIT_TIMEOUT
+        tm_statTimeouts += 1
+        realizedTradeR := (close - tm_posEntry) * tm_posDir / tm_posRisk
+        if realizedTradeR > 0
+            tm_statNetWins += 1
+            tm_consecLosses := 0
+        else
+            tm_consecLosses += 1
+
+    if closed
+        tm_statTotalTrades += 1
+        tm_statClosedN += 1
+        tm_statRealizedRSum += realizedTradeR
+        tm_needReset := true
+
+// 4. Open a new position (one position at a time)
+if tm_okBar and tm_signal and tm_posStage == TM2_STAGE_IDLE
+    tm_posDir    := tm_plan2.dir
+    tm_posType   := tm_plan2.orderType
+    tm_posMode   := tm_activeMode
+    tm_posEntry  := tm_plan2.entry
+    tm_posLimit  := tm_plan2.limitPrice
+    tm_posSl     := tm_plan2.sl
+    tm_posTp1    := tm_plan2.tp1
+    tm_posTp2    := tm_plan2.tp2
+    tm_posTp3    := tm_plan2.tp3
+    tm_posRisk   := tm_plan2.risk
+    tm_posBars   := 0
+    tm_posBar    := bar_index
+    tm_posMaxFavR:= 0.0
+    tm_posSigId  := "TM2_" + syminfo.ticker + "_" + timeframe.period + "_" + str.tostring(time) + "_" + (tm_plan2.dir == 1 ? "L" : "S")
+    tm_dayCount  += 1
+    tm_barsSince := 0
+    tm_exitReason:= TM2_EXIT_NONE
+
+    if tm_plan2.orderType == "LIMIT"
+        tm_posStage := TM2_STAGE_PENDING_LIMIT
+        tm_evPending := true
+        tm_statPendingN += 1
+    else
+        tm_posStage := TM2_STAGE_OPEN
+        tm_evEntry  := true
+        tm_statFilledN += 1
+
+// --- 6. Realized Statistics ---------------------------------------------------
+float tm_tp1HitRate = tm_statTotalTrades > 0 ? (float(tm_statTp1Hits) / float(tm_statTotalTrades)) * 100.0 : 0.0
+float tm_netWinrate = tm_statTotalTrades > 0 ? (float(tm_statNetWins) / float(tm_statTotalTrades)) * 100.0 : 0.0
+float tm_avgRealizedR = tm_statTotalTrades > 0 ? tm_statRealizedRSum / float(tm_statTotalTrades) : 0.0
+
+// =============================================================================
+//  L9 - VISUALIZATION & COMPREHENSIVE DASHBOARD (v2.0)
+// =============================================================================
+
+// --- 1. Signal & Limit Markers -----------------------------------------------
+bool tm_drawLongEntry  = tm_showViz and tm_showSig and (tm_evEntry or tm_evFilled) and tm_posDir == 1
+bool tm_drawShortEntry = tm_showViz and tm_showSig and (tm_evEntry or tm_evFilled) and tm_posDir == -1
+
+plotshape(tm_drawLongEntry,  title = "LONG ENTRY",  style = shape.triangleup,   location = location.belowbar, color = tm_cBull, size = size.small, text = "L", textcolor = tm_cBull, force_overlay = true)
+plotshape(tm_drawShortEntry, title = "SHORT ENTRY", style = shape.triangledown, location = location.abovebar, color = tm_cBear, size = size.small, text = "S", textcolor = tm_cBear, force_overlay = true)
+
+plotshape(tm_showViz and tm_showSig and tm_evPending and tm_posDir == 1,  title = "LONG LIMIT PENDING",  style = shape.circle, location = location.belowbar, color = color.new(tm_cBull, 30), size = size.tiny, text = "L-LIM", textcolor = tm_cBull, force_overlay = true)
+plotshape(tm_showViz and tm_showSig and tm_evPending and tm_posDir == -1, title = "SHORT LIMIT PENDING", style = shape.circle, location = location.abovebar, color = color.new(tm_cBear, 30), size = size.tiny, text = "S-LIM", textcolor = tm_cBear, force_overlay = true)
+
+// Hit & Lifecycle Labels
+if tm_showViz and tm_showHit and tm_evTp == 1
+    label.new(bar_index, tm_posTp1, "TP1+ (BE)", style = label.style_label_left, color = color.new(tm_cBull, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showHit and tm_evTp == 2
+    label.new(bar_index, tm_posTp2, "TP2+ (TR)", style = label.style_label_left, color = color.new(tm_cBull, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showHit and tm_evTp == 3
+    label.new(bar_index, tm_posTp3, "TP3+ (RUN)", style = label.style_label_left, color = color.new(tm_cBull, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showHit and tm_evSl
+    string slTxt = tm_exitReason == TM2_EXIT_BREAKEVEN ? "BE-HIT" : tm_exitReason == TM2_EXIT_TRAIL ? "TR-HIT" : "SL-HIT"
+    color slCol  = tm_exitReason == TM2_EXIT_BREAKEVEN ? color.orange : tm_exitReason == TM2_EXIT_TRAIL ? color.teal : tm_cBear
+    label.new(bar_index, tm_posSl, slTxt, style = label.style_label_left, color = color.new(slCol, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showHit and tm_evDecay
+    label.new(bar_index, close, "TIME-DECAY", style = label.style_label_left, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showHit and tm_evTimeout
+    label.new(bar_index, close, "TIMEOUT", style = label.style_label_left, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+
+// --- 2. Active Position Zone Boxes, Lines & Info Label -----------------------
+var box   tm_bxSl    = box.new(bar_index, 0.0, bar_index, 0.0, border_color = color.new(color.gray, 60), bgcolor = color.new(color.gray, 88), force_overlay = true)
+var box   tm_bxTp1   = box.new(bar_index, 0.0, bar_index, 0.0, border_color = color.new(tm_cBull, 50),  bgcolor = color.new(tm_cBull, 90),  force_overlay = true)
+var box   tm_bxTp2   = box.new(bar_index, 0.0, bar_index, 0.0, border_color = color.new(tm_cBull, 60),  bgcolor = color.new(tm_cBull, 93),  force_overlay = true)
+var box   tm_bxTp3   = box.new(bar_index, 0.0, bar_index, 0.0, border_color = color.new(tm_cBull, 70),  bgcolor = color.new(tm_cBull, 95),  force_overlay = true)
+var line  tm_lnEntry = line.new(bar_index, 0.0, bar_index + 1, 0.0, color = color.new(color.silver, 30), style = line.style_dashed, force_overlay = true)
+var line  tm_lnStop  = line.new(bar_index, 0.0, bar_index + 1, 0.0, color = color.new(tm_cBear, 30),  style = line.style_solid,  force_overlay = true)
+var label tm_lbInfo  = label.new(bar_index, 0.0, "", style = label.style_label_left, color = color.new(color.gray, 20), textcolor = color.white, size = size.tiny, force_overlay = true)
+
+int   tm_right = tm_posDir != 0 and not na(tm_posBar) ? tm_posBar + tm_zoneLen : bar_index + 1
+color tm_base  = tm_posDir == 1 ? tm_cBull : tm_cBear
+bool  tm_posActive = tm_posStage >= TM2_STAGE_PENDING_LIMIT and tm_posDir != 0 and not na(tm_posBar)
+
+if tm_showViz and tm_showZone and tm_posActive
+    box.set_lefttop(tm_bxSl,  tm_posBar, math.max(tm_posEntry, tm_posSl))
+    box.set_rightbottom(tm_bxSl, tm_right, math.min(tm_posEntry, tm_posSl))
+    box.set_lefttop(tm_bxTp1, tm_posBar, math.max(tm_posEntry, tm_posTp1))
+    box.set_rightbottom(tm_bxTp1, tm_right, math.min(tm_posEntry, tm_posTp1))
+    box.set_lefttop(tm_bxTp2, tm_posBar, math.max(tm_posEntry, tm_posTp2))
+    box.set_rightbottom(tm_bxTp2, tm_right, math.min(tm_posEntry, tm_posTp2))
+    box.set_lefttop(tm_bxTp3, tm_posBar, math.max(tm_posEntry, tm_posTp3))
+    box.set_rightbottom(tm_bxTp3, tm_right, math.min(tm_posEntry, tm_posTp3))
+    line.set_xy1(tm_lnEntry, tm_posBar, tm_posEntry)
+    line.set_xy2(tm_lnEntry, tm_right,  tm_posEntry)
+    line.set_xy1(tm_lnStop,  tm_posBar, tm_posSl)
+    line.set_xy2(tm_lnStop,  tm_right,  tm_posSl)
+    label.set_xy(tm_lbInfo, tm_right, tm_posTp3)
+    string stageStr = tm_posStage == TM2_STAGE_PENDING_LIMIT ? "PENDING LIMIT" : tm_posDir == 1 ? "LONG" : "SHORT"
+    string modeStr  = tm_posMode == "" ? "" : tm_posMode + "\n"
+    string posLabel = modeStr + stageStr + "\nE " + f_fmtPx(tm_posEntry) + "\nSL " + f_fmtPx(tm_posSl) + "\nTP1 " + f_fmtPx(tm_posTp1) + "\nTP2 " + f_fmtPx(tm_posTp2) + "\nTP3 " + f_fmtPx(tm_posTp3)
+    label.set_text(tm_lbInfo, posLabel)
+    label.set_color(tm_lbInfo, color.new(tm_base, 10))
+else
+    box.set_lefttop(tm_bxSl,  bar_index, na)
+    box.set_rightbottom(tm_bxSl,  bar_index, na)
+    box.set_lefttop(tm_bxTp1, bar_index, na)
+    box.set_rightbottom(tm_bxTp1, bar_index, na)
+    box.set_lefttop(tm_bxTp2, bar_index, na)
+    box.set_rightbottom(tm_bxTp2, bar_index, na)
+    box.set_lefttop(tm_bxTp3, bar_index, na)
+    box.set_rightbottom(tm_bxTp3, bar_index, na)
+    line.set_xy1(tm_lnEntry, bar_index, na)
+    line.set_xy2(tm_lnEntry, bar_index + 1, na)
+    line.set_xy1(tm_lnStop,  bar_index, na)
+    line.set_xy2(tm_lnStop,  bar_index + 1, na)
+    label.set_xy(tm_lbInfo, bar_index, na)
+    label.set_text(tm_lbInfo, "")
+
+// --- 3. Liquidity Lines (PDH / PDL, PWH / PWL, Session High / Low) -----------
+var line tm_lPDH = na
+var line tm_lPDL = na
+var line tm_lPWH = na
+var line tm_lPWL = na
+var line tm_lSHi = na
+var line tm_lSLo = na
+bool tm_newDay  = f_isNewDay()
+bool tm_newWeek = ta.change(time("W")) != 0
+
+// PDH / PDL
+bool tm_pdVis = tm_showViz and tm_showPd and tm_liq_pdOn
+if tm_pdVis and (tm_newDay or na(tm_lPDH))
+    if not na(tm_lPDH)
+        line.delete(tm_lPDH)
+        line.delete(tm_lPDL)
+    tm_lPDH := line.new(bar_index, tm_pdh, bar_index + 1, tm_pdh, color = color.new(color.orange, 40), style = line.style_dashed, width = 1, force_overlay = true)
+    tm_lPDL := line.new(bar_index, tm_pdl, bar_index + 1, tm_pdl, color = color.new(color.orange, 40), style = line.style_dashed, width = 1, force_overlay = true)
+if tm_pdVis and not na(tm_lPDH)
+    line.set_x2(tm_lPDH, bar_index + 1)
+    line.set_x2(tm_lPDL, bar_index + 1)
+if not tm_pdVis and not na(tm_lPDH)
+    line.delete(tm_lPDH)
+    line.delete(tm_lPDL)
+    tm_lPDH := na
+    tm_lPDL := na
+
+// PWH / PWL
+bool tm_pwVis = tm_showViz and tm_showPw and tm_liq_pwOn
+if tm_pwVis and (tm_newWeek or na(tm_lPWH))
+    if not na(tm_lPWH)
+        line.delete(tm_lPWH)
+        line.delete(tm_lPWL)
+    tm_lPWH := line.new(bar_index, tm_pwh, bar_index + 1, tm_pwh, color = color.new(color.blue, 50), style = line.style_dotted, width = 1, force_overlay = true)
+    tm_lPWL := line.new(bar_index, tm_pwl, bar_index + 1, tm_pwl, color = color.new(color.blue, 50), style = line.style_dotted, width = 1, force_overlay = true)
+if tm_pwVis and not na(tm_lPWH)
+    line.set_x2(tm_lPWH, bar_index + 1)
+    line.set_x2(tm_lPWL, bar_index + 1)
+if not tm_pwVis and not na(tm_lPWH)
+    line.delete(tm_lPWH)
+    line.delete(tm_lPWL)
+    tm_lPWH := na
+    tm_lPWL := na
+
+// Session High / Low
+bool tm_sdVis = tm_showViz and tm_showSess and tm_liq_sessOn
+if tm_sdVis and (tm_sessChanged or na(tm_lSHi)) and tm_sessName != "-" and not na(tm_sessHi)
+    if not na(tm_lSHi)
+        line.delete(tm_lSHi)
+        line.delete(tm_lSLo)
+    tm_lSHi := line.new(bar_index, tm_sessHi, bar_index + 1, tm_sessHi, color = color.new(color.gray, 30), style = line.style_dashed, width = 1, force_overlay = true)
+    tm_lSLo := line.new(bar_index, tm_sessLo, bar_index + 1, tm_sessLo, color = color.new(color.gray, 30), style = line.style_dashed, width = 1, force_overlay = true)
+if tm_sdVis and not na(tm_lSHi)
+    line.set_xy1(tm_lSHi, bar_index, tm_sessHi)
+    line.set_xy2(tm_lSHi, bar_index + 1, tm_sessHi)
+    line.set_xy1(tm_lSLo, bar_index, tm_sessLo)
+    line.set_xy2(tm_lSLo, bar_index + 1, tm_sessLo)
+if not tm_sdVis and not na(tm_lSHi)
+    line.delete(tm_lSHi)
+    line.delete(tm_lSLo)
+    tm_lSHi := na
+    tm_lSLo := na
+
+// Sweep Labels on Chart
+if tm_showViz and tm_showSweepLabels and tm_liq_sweepOn and tm_sweepBull
+    label.new(bar_index, low,  "Sweep+", style = label.style_label_up,   color = color.new(tm_cBull, 10), textcolor = color.white, size = size.tiny, force_overlay = true)
+if tm_showViz and tm_showSweepLabels and tm_liq_sweepOn and tm_sweepBear
+    label.new(bar_index, high, "Sweep-", style = label.style_label_down, color = color.new(tm_cBear, 10), textcolor = color.white, size = size.tiny, force_overlay = true)
+
+// --- 4. 2-Point Trendline Engine ---------------------------------------------
+var line tm_lnTlUp = na
+var line tm_lnTlDn = na
+
+bool tm_tlVis = tm_showViz and tm_showTl and tm_liq_tlOn
+bool tm_tlUpDraw = tm_tlVis and tm_tlUpOk and not na(tm_tlUpAt) and math.abs(tm_tlUpAt - close) <= tm_liq_tlMaxDev * tm_atr
+if tm_tlUpDraw
+    if not na(tm_lnTlUp)
+        line.set_xy1(tm_lnTlUp, tm_tl1LoB, tm_tl1Lo)
+        line.set_xy2(tm_lnTlUp, bar_index, tm_tlUpAt)
+    else
+        tm_lnTlUp := line.new(tm_tl1LoB, tm_tl1Lo, bar_index, tm_tlUpAt, color = color.new(tm_cBull, 30), width = 1, force_overlay = true)
+else if not na(tm_lnTlUp)
+    line.delete(tm_lnTlUp)
+    tm_lnTlUp := na
+
+bool tm_tlDnDraw = tm_tlVis and tm_tlDnOk and not na(tm_tlDnAt) and math.abs(tm_tlDnAt - close) <= tm_liq_tlMaxDev * tm_atr
+if tm_tlDnDraw
+    if not na(tm_lnTlDn)
+        line.set_xy1(tm_lnTlDn, tm_tl1HiB, tm_tl1Hi)
+        line.set_xy2(tm_lnTlDn, bar_index, tm_tlDnAt)
+    else
+        tm_lnTlDn := line.new(tm_tl1HiB, tm_tl1Hi, bar_index, tm_tlDnAt, color = color.new(tm_cBear, 30), width = 1, force_overlay = true)
+else if not na(tm_lnTlDn)
+    line.delete(tm_lnTlDn)
+    tm_lnTlDn := na
+
+// --- 5. Price Zones (S/R, FVG, Order Blocks) on Last Bar ---------------------
+var array<box> tm_zoneBoxes = array.new<box>()
+if barstate.islast and tm_showViz and tm_showPriceZones
+    for bx in tm_zoneBoxes
+        box.delete(bx)
+    array.clear(tm_zoneBoxes)
+    if tm_sr_showOn
+        for z in sr_zones
+            if not z.broken
+                color zC = z.side == 1 ? color.new(tm_cBull, 88) : color.new(tm_cBear, 88)
+                color zBC = z.side == 1 ? color.new(tm_cBull, 55) : color.new(tm_cBear, 55)
+                int zLeft = math.max(bar_index - 50, 0)
+                array.push(tm_zoneBoxes, box.new(zLeft, z.top, bar_index + tm_zoneLen, z.bot, border_color = zBC, bgcolor = zC, force_overlay = true))
+    if tm_fvg_showOn
+        for g in tm_fvgs
+            if not g.mitigated and (bar_index - g.barIdx <= 300)
+                color gC = g.side == 1 ? color.new(tm_cBull, 88) : color.new(tm_cBear, 88)
+                color gB = g.side == 1 ? color.new(tm_cBull, 55) : color.new(tm_cBear, 55)
+                int gLeft = math.max(g.barIdx, bar_index - 300)
+                array.push(tm_zoneBoxes, box.new(gLeft, g.top, g.barIdx + tm_fvg_life, g.bot, border_color = gB, bgcolor = gC, force_overlay = true))
+    if tm_ob_showOn
+        for o in tm_obs
+            if not o.mitigated and (bar_index - o.barIdx <= 300)
+                color oC = o.side == 1 ? color.new(#f5c542, 85) : color.new(#ff8b3d, 85)
+                color oB = o.side == 1 ? color.new(#f5c542, 50) : color.new(#ff8b3d, 50)
+                int oLeft = math.max(o.barIdx, bar_index - 300)
+                array.push(tm_zoneBoxes, box.new(oLeft, o.top, o.barIdx + tm_zoneLen, o.bot, border_color = oB, bgcolor = oC, force_overlay = true))
+else if array.size(tm_zoneBoxes) > 0 and not tm_showPriceZones
+    for bx in tm_zoneBoxes
+        box.delete(bx)
+    array.clear(tm_zoneBoxes)
+
+// --- 6. Indicators Overlay & Pane Plots ---------------------------------------
+plot(tm_showViz and tm_showEma ? tm_emaF : na, "EMA fast", color = color.new(color.teal, 0),   linewidth = 1, force_overlay = true)
+plot(tm_showViz and tm_showEma ? tm_emaM : na, "EMA mid",  color = color.new(color.orange, 0), linewidth = 1, force_overlay = true)
+plot(tm_showViz and tm_showEma ? tm_emaS : na, "EMA slow", color = color.new(color.red, 20),   linewidth = 1, force_overlay = true)
+plot(tm_showViz and tm_showVwap and tm_vwapOk ? tm_vwap : na, "VWAP", color = color.new(#b388ff, 0), linewidth = 1, style = plot.style_linebr, force_overlay = true)
+
+// Volume Pane (VSA 6 Bucket Colors)
+color tm_volCol = f_vsaColor(tm_vol, tm_volMA, tm_vol_spikeR, tm_vol_rVH, tm_vol_rH, tm_vol_rN, tm_vol_rL)
+plot(tm_showViz and tm_showVol ? tm_vol : na, "Volume", color = tm_volCol, style = plot.style_columns, format = format.volume)
+plot(tm_showViz and tm_vol_showMA ? tm_volMA : na, "Volume MA", color = color.new(color.green, 0), linewidth = 1, format = format.volume)
+
+// --- 7. Dashboard: Compact (default) + Advanced -------------------------------
+// v2.1: Compact answers "why is there no trade?" on one screen. Advanced keeps
+// every v1 row and adds score/lifecycle diagnostics. Both modes share one table,
+// so switching mode never deletes chart elements.
+f_dashRow(table t, int row, string key, string val, color valCol, color keyCol, color bgCol, string fSize) =>
+    table.cell(t, 0, row, key, text_color = keyCol, text_size = fSize, text_halign = text.align_left, bgcolor = bgCol)
+    table.cell(t, 1, row, val, text_color = valCol, text_size = fSize, text_halign = text.align_right, bgcolor = bgCol)
+
+bool tm_dashWanted = tm_showViz and tm_showDash
+int  tm_dashRows   = tm_dashMode == "Compact" ? 13 : 34
+var table tm_tbl   = na
+var int   tm_tblRows = 0
+
+if tm_dashWanted and (na(tm_tbl) or tm_tblRows != tm_dashRows)
+    if not na(tm_tbl)
+        table.delete(tm_tbl)
+    tm_tbl := table.new(position.top_right, 2, tm_dashRows, border_width = 1, border_color = color.new(color.gray, 70), force_overlay = true)
+    tm_tblRows := tm_dashRows
+
+if not tm_dashWanted and not na(tm_tbl)
+    table.delete(tm_tbl)
+    tm_tbl := na
+    tm_tblRows := 0
+
+tm_font = tm_dashSize == "Tiny" ? size.tiny : tm_dashSize == "Small" ? size.small : size.normal
+
+// Shared display strings
+string tm_dirTxt    = tm_dir == 1 ? "LONG" : tm_dir == -1 ? "SHORT" : "-"
+string tm_ctxTxt    = not tm_tfHierarchyOk ? "TF_WARN" : tm_ctxDir == 1 ? "Bull" : tm_ctxDir == -1 ? "Bear" : "Neutral"
+string tm_setupTxt  = not tm_tfHierarchyOk ? "TF_WARN" : tm_setupDir == 1 ? "Bull" : tm_setupDir == -1 ? "Bear" : "Neutral"
+string tm_statusTxt = f_tmLiveStatus(tm_signal, tm_posStage, tm_noTradeReason)
+string tm_reasonTxt = f_tmReasonLabel(tm_noTradeReason)
+string tm_modeTxt   = tm_activeMode == "NONE" ? f_tmReasonLabel(tm_modeReason) : tm_activeMode
+string tm_planTxt   = tm_plan2.orderType + " " + (tm_plan2.orderType == "LIMIT" ? "@" + f_fmtPx(tm_plan2.limitPrice) : "@MKT")
+string tm_perfTxt   = "TP1 " + str.tostring(tm_tp1HitRate, "#.#") + "% | Net " + str.tostring(tm_netWinrate, "#.#") + "% | " + str.tostring(tm_avgRealizedR, "+#.##;-#.##") + "R"
+int    tm_blockCount = tm_blockMask == "" ? 0 : str.length(tm_blockMask) - str.length(str.replace_all(tm_blockMask, ",", "")) + 1
+color  tm_scoreCol  = tm_dir == 1 ? tm_cBull : tm_dir == -1 ? tm_cBear : color.gray
+color  tm_regCol    = tm_regime.code == 1 ? (tm_regime.trendDir == 1 ? tm_cBull : tm_cBear) : tm_regime.code == 0 ? color.yellow : color.purple
+color  tm_sessCol   = tm_sessOverlap ? color.orange : tm_sessNy ? color.yellow : tm_sessLondon ? color.aqua : tm_sessAsia ? color.teal : color.silver
+
+if not na(tm_tbl) and barstate.islast
+    color kC = color.new(color.gray, 10)
+    color vC = color.silver
+    color bg = color.new(color.black, 100)
+    table.clear(tm_tbl, 0, 0, 1, tm_dashRows - 1)
+
+    // --- Compact mode --------------------------------------------------------
+    if tm_dashMode == "Compact"
+        string compactHead = "TM2 [" + tm_assetMode + "] " + syminfo.ticker
+        string compactReason = tm_reasonTxt + (tm_blockCount > 1 ? " (+" + str.tostring(tm_blockCount - 1) + ")" : "")
+        string funnelTxt = "Cand " + str.tostring(tm_statCandidates) + " | Elig " + str.tostring(tm_statEligible) + " | Pend " + str.tostring(tm_statPendingN) + " | Fill " + str.tostring(tm_statFilledN) + " | Closed " + str.tostring(tm_statClosedN)
+        string compactSessTxt = tm_sessName + (tm_sessOverlap ? " (London/NY)" : "") + (na(tm_sessHi) ? "" : " | " + f_fmtPx(tm_sessHi) + " / " + f_fmtPx(tm_sessLo))
+        f_dashRow(tm_tbl, 0, compactHead, timeframe.period + " | v" + tm_scoreVersion, color.orange, color.orange, bg, tm_font)
+        f_dashRow(tm_tbl, 1, "Bias / Regime", "Ctx " + tm_ctxTxt + " | Setup " + tm_setupTxt + " | " + tm_regime.name, tm_regCol, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 2, "Session", compactSessTxt, tm_sessCol, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 3, "Long / Short Score", "L " + str.tostring(tm_longScore100) + " | S " + str.tostring(tm_shortScore100) + " | gap " + str.tostring(tm_scoreGap), tm_scoreCol, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 4, "Status", tm_statusTxt + " / " + tm_dirTxt, tm_signal ? tm_scoreCol : color.gray, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 5, "Top Block Reason", compactReason, tm_noTradeReason == "OK" ? color.gray : color.orange, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 6, "Entry Mode", tm_modeTxt, tm_modeReady ? color.teal : color.gray, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 7, "Entry Plan", tm_planTxt, tm_plan2.orderType == "LIMIT" ? color.teal : vC, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 8, "SL / Risk", (tm_plan2.valid ? f_fmtPx(tm_plan2.sl) : "-") + " / " + (tm_plan2.valid ? f_fmtPx(tm_plan2.risk) : "-"), tm_plan2.valid ? vC : color.yellow, kC, bg, tm_font)
+        string compactTpTxt = tm_plan2.valid ? f_fmtPx(tm_plan2.tp1) + " / " + f_fmtPx(tm_plan2.tp2) + " / " + f_fmtPx(tm_plan2.tp3) : "-"
+        f_dashRow(tm_tbl, 9, "TP1 / TP2 / TP3", compactTpTxt, vC, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 10, "Net RR / Lev / Liq", str.tostring(tm_plan2.netRR, "#.##") + "R | " + str.tostring(tm_plan2.effLev, "#.#") + "x | " + (na(tm_plan2.liqPrice) ? "-" : f_fmtPx(tm_plan2.liqPrice)), tm_plan2.valid ? vC : color.yellow, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 11, "TP1% / Net% / AvgR", tm_perfTxt, tm_avgRealizedR >= 0 ? color.green : color.red, kC, bg, tm_font)
+        f_dashRow(tm_tbl, 12, "Lifecycle", funnelTxt, vC, kC, bg, tm_font)
+    // --- Advanced mode -------------------------------------------------------
+    else
+        // Row 0: header
+        f_dashRow(tm_tbl, 0, "TM2 [" + tm_assetMode + "] " + syminfo.ticker, timeframe.period, color.orange, color.orange, bg, tm_font)
+
+        // Row 1: selected-side score
+        string advScoreTxt = tm_directionCode == "OK" ? str.tostring(tm_score100) + " / " + tm_quality : "NO TRADE (" + tm_directionCode + ")"
+        f_dashRow(tm_tbl, 1, "Score", advScoreTxt, tm_scoreCol, kC, bg, tm_font)
+
+        // Row 2: signal / status
+        string advStatus = tm_dirTxt + (tm_signal ? " [SIG]" : tm_noTradeReason != "OK" ? " [" + tm_noTradeReason + "]" : "")
+        f_dashRow(tm_tbl, 2, "Signal / Status", advStatus, tm_signal ? tm_scoreCol : color.gray, kC, bg, tm_font)
+
+        // Row 3: structure
+        f_dashRow(tm_tbl, 3, "Structure", tm_trend == 1 ? "Bullish" : tm_trend == -1 ? "Bearish" : "Ranging", tm_trend == 1 ? tm_cBull : tm_trend == -1 ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 4: BOS / CHoCH / MSS
+        string structEvt = tm_bosUp or tm_bosDown ? "BOS" : tm_chochUp or tm_chochDown ? "CHoCH" : tm_mssUp or tm_mssDown ? "MSS" : "-"
+        f_dashRow(tm_tbl, 4, "BOS / CHoCH / MSS", structEvt, (tm_bosUp or tm_chochUp or tm_mssUp) ? tm_cBull : (tm_bosDown or tm_chochDown or tm_mssDown) ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 5: retest / failed breakout
+        f_dashRow(tm_tbl, 5, "Retest / Fail", tm_retestBull or tm_retestBear ? "RETEST" : tm_failBull or tm_failBear ? "FAILBRK" : "-", tm_retestBull or tm_failBear ? tm_cBull : tm_retestBear or tm_failBull ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 6: latest structure event
+        string tm_evtTxt = "-"
+        color tm_evtCol = color.gray
+        if array.size(tm_evtBuf) > 0
+            TMEvent tm_lastEvt = array.get(tm_evtBuf, array.size(tm_evtBuf) - 1)
+            tm_evtTxt := tm_lastEvt.kind + " " + (tm_lastEvt.dir == "bull" ? "+" : "-") + (tm_lastEvt.confirmed ? "" : "?")
+            tm_evtCol := tm_lastEvt.dir == "bull" ? tm_cBull : tm_cBear
+        f_dashRow(tm_tbl, 6, "Last event", tm_evtTxt, tm_evtCol, kC, bg, tm_font)
+
+        // Row 7: context TF
+        f_dashRow(tm_tbl, 7, "Context TF (" + tm_ctxTf + ")", tm_ctxTxt, not tm_tfHierarchyOk ? color.yellow : tm_ctxDir == 1 ? tm_cBull : tm_ctxDir == -1 ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 8: setup TF
+        f_dashRow(tm_tbl, 8, "Setup TF (" + tm_setupTf + ")", tm_setupTxt, not tm_tfHierarchyOk ? color.yellow : tm_setupDir == 1 ? tm_cBull : tm_setupDir == -1 ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 9: liquidity
+        f_dashRow(tm_tbl, 9, "Liquidity", tm_sweepBull ? "Sweep+" : tm_sweepBear ? "Sweep-" : "-", tm_sweepBull ? tm_cBull : tm_sweepBear ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 10: PDH / PDL
+        f_dashRow(tm_tbl, 10, "PDH / PDL", f_fmtPx(tm_pdh) + " / " + f_fmtPx(tm_pdl), vC, kC, bg, tm_font)
+
+        // Row 11: PWH / PWL
+        f_dashRow(tm_tbl, 11, "PWH / PWL", f_fmtPx(tm_pwh) + " / " + f_fmtPx(tm_pwl), vC, kC, bg, tm_font)
+
+        // Row 12: session high / low
+        f_dashRow(tm_tbl, 12, "Sess Hi / Lo", (na(tm_sessHi) ? "-" : f_fmtPx(tm_sessHi)) + " / " + (na(tm_sessLo) ? "-" : f_fmtPx(tm_sessLo)), vC, kC, bg, tm_font)
+
+        // Row 13: trendline touches
+        f_dashRow(tm_tbl, 13, "Trendline touch", str.tostring(tm_tlLoTouch) + " up / " + str.tostring(tm_tlHiTouch) + " dn", vC, kC, bg, tm_font)
+
+        // Row 14: candle pattern
+        string cpLabel = tm_dispBull ? "Displacement+" : tm_dispBear ? "Displacement-" : tm_bullEng ? "Engulf+" : tm_bearEng ? "Engulf-" : tm_bullPin ? "Pin+" : tm_bearPin ? "Pin-" : tm_bullRej ? "Rej+" : tm_bearRej ? "Rej-" : "-"
+        f_dashRow(tm_tbl, 14, "Candle", cpLabel, tm_cpScore > 0 ? tm_cBull : tm_cpScore < 0 ? tm_cBear : color.gray, kC, bg, tm_font)
+
+        // Row 15: volume bucket
+        f_dashRow(tm_tbl, 15, "Volume / Bucket", str.tostring(tm_volRatio, "#.##") + "x / " + tm_volBucket, tm_isTim ? color.purple : vC, kC, bg, tm_font)
+        // Row 16: relative volume / OBV
+        f_dashRow(tm_tbl, 16, "RelVol / OBV", str.tostring(tm_relVol, "#.##") + "x / " + (tm_obvSlope > 0 ? "+" : tm_obvSlope < 0 ? "-" : "0"), tm_obvScore > 0 ? tm_cBull : tm_obvScore < 0 ? tm_cBear : vC, kC, bg, tm_font)
+
+        // Row 17: RSI / MACD
+        f_dashRow(tm_tbl, 17, "RSI / MACD", str.tostring(tm_rsi, "#.#") + " / " + str.tostring(tm_macdHist, format.mintick), tm_rsi < tm_rsiOs ? tm_cBull : tm_rsi > tm_rsiOb ? tm_cBear : vC, kC, bg, tm_font)
+
+        // Row 18: ADX / DMI
+        f_dashRow(tm_tbl, 18, "ADX / DMI", str.tostring(tm_adx, "#.#") + " / " + (tm_diPlus > tm_diMinus ? "+" : "-"), tm_adx >= tm_adxMin ? color.purple : vC, kC, bg, tm_font)
+
+        // Row 19: ATR% / BBW
+        f_dashRow(tm_tbl, 19, "ATR% / BBW", str.tostring(tm_atrPct, "#.##") + "% / " + str.tostring(tm_bbWidth, "#.##") + (tm_bbExpand ? " Exp" : " Ctr"), vC, kC, bg, tm_font)
+
+        // Row 20: VWAP / day location
+        f_dashRow(tm_tbl, 20, "VWAP / Day pos", (tm_vwapOk ? f_fmtPx(tm_vwap) : "-") + " / " + str.tostring(f_clamp(tm_dayRange, -1.0, 1.0), "+#.##;-#.##"), tm_vwapScore > 0 ? tm_cBull : tm_vwapScore < 0 ? tm_cBear : vC, kC, bg, tm_font)
+
+        // Row 21: session
+        string advSessTxt = tm_sessName + (tm_sessOverlap ? " (London/NY Overlap)" : "") + (tm_cryptoSessionNeutral ? " [24/7 Neutral]" : "")
+        f_dashRow(tm_tbl, 21, "Session", advSessTxt, tm_sessCol, kC, bg, tm_font)
+
+        // Row 22: position / orders / W-L-TO
+        string posTxt = (tm_posDir == 1 ? "LONG" : tm_posDir == -1 ? "SHORT" : "-") + " / " + str.tostring(tm_dayCount) + "/" + str.tostring(tm_maxDay) + " / " + str.tostring(tm_statNetWins) + "-" + str.tostring(tm_statFullLosses) + "-" + str.tostring(tm_statTimeouts)
+        f_dashRow(tm_tbl, 22, "Position / Orders / W-L-TO", posTxt, tm_posDir == 1 ? tm_cBull : tm_posDir == -1 ? tm_cBear : vC, kC, bg, tm_font)
+
+        // Row 23: leverage / liquidation / net RR
+        string futuresTxt = str.tostring(tm_plan2.effLev, "#.#") + "x | Liq " + (na(tm_plan2.liqPrice) ? "-" : f_fmtPx(tm_plan2.liqPrice)) + " | " + str.tostring(tm_plan2.netRR, "#.##") + "R"
+        f_dashRow(tm_tbl, 23, "Lev / Liq / Net RR", futuresTxt, tm_plan2.valid ? vC : color.yellow, kC, bg, tm_font)
+
+        // Row 24: market regime
+        f_dashRow(tm_tbl, 24, "Market Regime", tm_regime.name, tm_regCol, kC, bg, tm_font)
+
+        // Row 25: obstacle / overextension
+        bool obsBlock = tm_dir == 1 ? tm_obstacleBlockedLong : tm_dir == -1 ? tm_obstacleBlockedShort : false
+        string obsTxt = obsBlock ? "BLOCKED (< TP1)" : "CLEAR"
+        string extTxt = tm_isOverextended ? "EXT (" + str.tostring(tm_extEma, "#.#") + "x)" : "NORMAL"
+        f_dashRow(tm_tbl, 25, "Obstacle / Overext", obsTxt + " / " + extTxt, obsBlock ? color.red : tm_isOverextended ? color.yellow : tm_cBull, kC, bg, tm_font)
+
+        // Row 26: entry plan + RR evaluation target
+        f_dashRow(tm_tbl, 26, "Entry Plan (RR@" + tm_plan2.evalTarget + ")", tm_planTxt, tm_plan2.orderType == "LIMIT" ? color.teal : vC, kC, bg, tm_font)
+
+        // Row 27: performance
+        f_dashRow(tm_tbl, 27, "TP1% / Net% / Avg R", tm_perfTxt + " | BE " + str.tostring(tm_statBeSaves), tm_avgRealizedR >= 0 ? color.green : color.red, kC, bg, tm_font)
+
+        // Row 28: independent directional scores (v2.1)
+        f_dashRow(tm_tbl, 28, "Long / Short Score [v2.1]", "L " + str.tostring(tm_longScore100) + " | S " + str.tostring(tm_shortScore100), tm_scoreCol, kC, bg, tm_font)
+
+        // Row 29: direction selection diagnostics
+        string dirDiag = "cand " + (tm_candidateDir == 1 ? "LONG" : tm_candidateDir == -1 ? "SHORT" : "-") + " | gap " + str.tostring(tm_scoreGap) + " >= " + str.tostring(tm_scoreMargin)
+        f_dashRow(tm_tbl, 29, "Direction / Margin", dirDiag, tm_directionCode == "OK" ? tm_scoreCol : color.orange, kC, bg, tm_font)
+
+        // Row 30: top block reason
+        f_dashRow(tm_tbl, 30, "Top Block Reason [v2.1]", tm_reasonTxt, tm_noTradeReason == "OK" ? color.gray : color.orange, kC, bg, tm_font)
+
+        // Row 31: every active blocker
+        f_dashRow(tm_tbl, 31, "All Blockers (" + str.tostring(tm_blockCount) + ")", tm_blockMask == "" ? "-" : tm_blockMask, tm_blockCount > 0 ? color.orange : color.gray, kC, bg, tm_font)
+
+        // Row 32: active entry mode
+        string advMode = tm_modeTxt + " | ready " + (tm_modeReady ? "Y" : "N")
+        f_dashRow(tm_tbl, 32, "Entry Mode [v2.1]", advMode, tm_modeReady ? color.teal : color.gray, kC, bg, tm_font)
+
+        // Row 33: score config + lifecycle funnel
+        string cfgTxt = "v" + tm_scoreVersion + " | cfg " + tm_cfgName + " | Cand " + str.tostring(tm_statCandidates) + " | Elig " + str.tostring(tm_statEligible) + " | Pend " + str.tostring(tm_statPendingN) + " | Fill " + str.tostring(tm_statFilledN) + " | Closed " + str.tostring(tm_statClosedN)
+        f_dashRow(tm_tbl, 33, "Score Cfg / Lifecycle", cfgTxt, vC, kC, bg, tm_font)
+
+// =============================================================================
+//  L10 - WEBHOOK JSON ALERTS & DEDUPLICATION (TM Indicator 2 - v2.1)
+// =============================================================================
+//  The payload is a versioned contract. `score` is the score of the side named
+//  by `score_side`; `long_score` / `short_score` are the independent 0-100
+//  values, so a downstream bot never has to infer direction from a signed score.
+// =============================================================================
+
+// Helper: Format JSON payload for webhook integration
+f_jsonTM2(string sigId, int dir, string ordType, float entry, float limPx, float sl, float t1, float t2, float t3, float posSize, float notional, float effLev, float liq, float netRR, float rr, string regName, string mode) =>
+    string tps = "[" + f_fmtPx(t1) + "," + f_fmtPx(t2) + "," + f_fmtPx(t3) + "]"
+    string liqStr = na(liq) ? "null" : f_fmtPx(liq)
+    string limStr = na(limPx) ? "null" : f_fmtPx(limPx)
+    string sideTxt = dir == 1 ? "LONG" : "SHORT"
+    string statusTxt = f_tmLiveStatus(tm_signal, tm_posStage, tm_noTradeReason)
+    string blockers = tm_blockMask == "" ? "" : tm_blockMask
+    string body = '{"sig_id":"' + sigId + '","version":"2.1.0","schema":"tm2.signal.v2.1","side":"' + sideTxt + '","order_type":"' + ordType + '","profile":"' + tm_assetMode + '","regime":"' + regName + '","mode":"' + mode + '","price":' + f_fmtPx(entry) + ',"limit_price":' + limStr + ',"sl":' + f_fmtPx(sl) + ',"tps":' + tps
+    body := body + ',"score":' + str.tostring(tm_score100) + ',"score_side":"' + (tm_dir == 1 ? "LONG" : tm_dir == -1 ? "SHORT" : sideTxt) + '","long_score":' + str.tostring(tm_longScore100) + ',"short_score":' + str.tostring(tm_shortScore100) + ',"score_gap":' + str.tostring(tm_scoreGap) + ',"score_version":"' + tm_scoreVersion + '","feature_set":"' + tm_scoreFeatureSet + '","score_meta":"' + tm_scoreMeta + '","quality":"' + tm_quality + '"'
+    body := body + ',"direction_code":"' + tm_directionCode + '","status":"' + statusTxt + '","top_block_reason":"' + tm_noTradeReason + '","blockers":"' + blockers + '"'
+    body := body + ',"eval_target":"' + tm_plan2.evalTarget + '","rr":' + str.tostring(rr, "#.##") + ',"net_rr":' + str.tostring(netRR, "#.##")
+    body := body + ',"atr":' + f_fmtPx(tm_atr) + ',"pos_size":' + str.tostring(posSize, "#.####") + ',"notional":' + str.tostring(notional, "#.##") + ',"eff_lev":' + str.tostring(effLev, "#.#") + ',"liq":' + liqStr + '}'
+    body
+
+f_jsonEventTM2(TMEvent e) =>
+    '{"kind":"' + e.kind + '","dir":"' + e.dir + '","ts":' + str.tostring(e.srcTime) + ',"bar":' + str.tostring(e.srcBar) + ',"tf":"' + e.tf + '","confirmed":' + (e.confirmed ? "true" : "false") + ',"level":' + f_fmtPx(e.level) + '}'
+
+tm_head2 = '{"project":"TM Indicator 2","version":"2.1.0","schema":"tm2.signal.v2.1","v":2.1,"ts":"' + f_ts() + '","exchange":"' + syminfo.prefix + '","symbol":"' + f_sym() + '","tf":"' + timeframe.period + '"'
+bool tm_doSend2 = tm_payloadMode != "Off"
+
+alertcondition(tm_evEntry and tm_posDir == 1,   "TM2 LONG ENTRY",       "TM2 LONG ENTRY {{ticker}} {{interval}}")
+alertcondition(tm_evEntry and tm_posDir == -1,  "TM2 SHORT ENTRY",      "TM2 SHORT ENTRY {{ticker}} {{interval}}")
+alertcondition(tm_evPending,                    "TM2 LIMIT PENDING",    "TM2 LIMIT PENDING {{ticker}} {{interval}}")
+alertcondition(tm_evFilled,                     "TM2 LIMIT FILLED",     "TM2 LIMIT FILLED {{ticker}} {{interval}}")
+alertcondition(tm_evBeMoved,                    "TM2 AUTO BREAK-EVEN",  "TM2 BE ACTIVATED {{ticker}}")
+alertcondition(tm_evTp > 0,                     "TM2 TAKE PROFIT",      "TM2 TP HIT {{ticker}}")
+alertcondition(tm_evSl,                         "TM2 STOP LOSS / EXIT", "TM2 EXIT {{ticker}}")
+alertcondition(tm_evDecay or tm_evTimeout,      "TM2 TIME EXIT",        "TM2 TIME EXIT {{ticker}}")
+
+if tm_okBar and tm_doSend2 and tm_evEntry
+    alert(tm_head2 + ',"action":"ENTRY",' + f_jsonTM2(tm_posSigId, tm_posDir, tm_posType, tm_posEntry, tm_posLimit, tm_posSl, tm_posTp1, tm_posTp2, tm_posTp3, tm_plan2.posSize, tm_plan2.notional, tm_plan2.effLev, tm_plan2.liqPrice, tm_plan2.netRR, tm_plan2.evalRR, tm_regime.name, tm_posMode) + "}", alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_evPending
+    alert(tm_head2 + ',"action":"LIMIT_PENDING",' + f_jsonTM2(tm_posSigId, tm_posDir, tm_posType, tm_posEntry, tm_posLimit, tm_posSl, tm_posTp1, tm_posTp2, tm_posTp3, tm_plan2.posSize, tm_plan2.notional, tm_plan2.effLev, tm_plan2.liqPrice, tm_plan2.netRR, tm_plan2.evalRR, tm_regime.name, tm_posMode) + "}", alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_evFilled
+    alert(tm_head2 + ',"action":"LIMIT_FILLED","sig_id":"' + tm_posSigId + '","price":' + f_fmtPx(tm_posEntry) + ',"mode":"' + tm_posMode + '","status":"FILLED"}', alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_evBeMoved
+    alert(tm_head2 + ',"action":"AUTO_BREAKEVEN","sig_id":"' + tm_posSigId + '","new_sl":' + f_fmtPx(tm_posSl) + "}", alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_posStage >= TM2_STAGE_OPEN and tm_evTp > 0
+    alert(tm_head2 + ',"action":"TAKE_PROFIT","sig_id":"' + tm_posSigId + '","level":' + str.tostring(tm_evTp) + "}", alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_evSl
+    alert(tm_head2 + ',"action":"EXIT","reason":"' + (tm_exitReason == TM2_EXIT_BREAKEVEN ? "BREAKEVEN" : tm_exitReason == TM2_EXIT_TRAIL ? "TRAIL" : "STOP_LOSS") + '","sig_id":"' + tm_posSigId + '"}', alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and (tm_evDecay or tm_evTimeout)
+    alert(tm_head2 + ',"action":"TIME_EXIT","reason":"' + (tm_evDecay ? "TIME_DECAY" : "TIMEOUT") + '","sig_id":"' + tm_posSigId + '"}', alert.freq_once_per_bar)
+
+if tm_okBar and tm_doSend2 and tm_evCancel
+    alert(tm_head2 + ',"action":"LIMIT_CANCEL","reason":"' + (tm_exitReason == TM2_CANCEL_MISSED ? "MISSED_MOVE" : "EXPIRED") + '","sig_id":"' + tm_posSigId + '"}', alert.freq_once_per_bar)
+
+// Structural events (BOS / CHoCH / Sweep)
+bool tm_evtNow2 = tm_okBar and tm_doSend2 and array.size(tm_evtBuf) > 0 and barstate.isconfirmed
+var int tm_lastEvtBar2 = -1
+if tm_evtNow2 and array.size(tm_evtBuf) > 0
+    TMEvent eTM2 = array.get(tm_evtBuf, array.size(tm_evtBuf) - 1)
+    if eTM2.srcBar != tm_lastEvtBar2
+        tm_lastEvtBar2 := eTM2.srcBar
+        alert(tm_head2 + ',"action":"EVENT",' + f_jsonEventTM2(eTM2) + "}", alert.freq_once_per_bar)
+
+// =============================================================================
+//  AUTO-GENERATED - DO NOT EDIT
+//  Target : tm-indicator
+//  Version: 2.1.0
+//  Source : pine/parts*/ + pine/shared/*.pine   ->   node tools/build.mjs
+//  Built  : 2026-11-15T15:20:43.675Z
+// =============================================================================

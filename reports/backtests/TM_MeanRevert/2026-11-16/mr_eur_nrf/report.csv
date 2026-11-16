@@ -1,0 +1,18 @@
+key;value
+symbol;EURUSDm
+expert;TM_MeanRevert
+end_time;2026.10.30 20:58:59
+deposit;5000.00
+final_balance;111.62
+net_profit;-4888.38
+gross_profit;9260.75
+gross_loss;-14149.13
+profit_factor;0.655
+trades;1961
+wins;802
+losses;1159
+largest_win;75.95
+largest_loss;-57.24
+max_consec_losses;13
+max_equity_dd_abs;4986.40
+max_equity_dd_pct;97.832
