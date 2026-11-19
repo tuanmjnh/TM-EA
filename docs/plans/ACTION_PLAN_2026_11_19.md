@@ -1,9 +1,9 @@
 # Kế hoạch Hành động Tổng thể & Lộ trình Thực thi (2026-11-19)
 **Mã kế hoạch:** `ACTION_PLAN_2026_11_19`  
 **Dựa trên tài liệu gốc:**  
-- [OPT_TM_EA_FIX.md](file:///d:/Applications/TM-EA/docs/2026.11.19/OPT_TM_EA_FIX.md) (Tối ưu & Sửa lỗi khẩn cấp)  
-- [SPEC_GOLD_SCALPER.md](file:///d:/Applications/TM-EA/docs/2026.11.19/SPEC_GOLD_SCALPER.md) (Thiết kế EA mới ổn định dài hạn)  
-- [MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md) (Tài liệu điều hành trung tâm v4.4)  
+- [OPT_TM_EA_FIX.md](file:///d:/Applications/TM-EA/docs/audits/OPT_TM_EA_FIX.md) (Tối ưu & Sửa lỗi khẩn cấp)  
+- [SPEC_GOLD_SCALPER.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_GOLD_SCALPER.md) (Thiết kế EA mới ổn định dài hạn)  
+- [MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md) (Tài liệu điều hành trung tâm v4.7)  
 
 ---
 

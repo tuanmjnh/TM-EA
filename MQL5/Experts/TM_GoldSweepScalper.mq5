@@ -1,7 +1,7 @@
 //+------------------------------------------------------------------+
 //| TM_GoldSweepScalper.mq5                                          |
 //| Rare-Fire Stable Scalper for XAUUSD (M5)                         |
-//| Built strictly according to docs/2026.11.19/SPEC_GOLD_SCALPER.md |
+//| Built strictly according to docs/specs/SPEC_GOLD_SCALPER.md       |
 //| 9-Module Architecture:                                           |
 //| 1. CSymbolSpecs     2. CTimeService     3. CRegimeEngine         |
 //| 4. CLiquidityMap    5. CStrategyHub     6. CRiskManager          |

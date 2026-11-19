@@ -13,11 +13,16 @@ Trend-following micro-scalper for small accounts: pullback entries (**v2.0: Brea
 TM-EA/
 ├── README.md
 ├── docs/
+│   ├── README.md                # Central documentation map & sitemap
+│   ├── MASTER.md                # Operating manual & AI orchestration hub (P0)
+│   ├── CHANGELOG.md             # Version history and detailed engineering log
+│   ├── ARCHITECTURE.md          # Technical implementation brief & safety invariants
 │   ├── USER_GUIDE.md            # Comprehensive user manual & beginner's guide
-│   ├── MASTER.md                # Operating manual & AI orchestration hub
-│   ├── ARCHITECTURE.md          # Implementation brief (safety rules win on conflict)
-│   ├── SOURCE_SPEC_V1.md        # Single source of truth for strategy requirements
-│   └── archive/v1/              # Superseded documents, read-only history
+│   ├── specs/                   # Strategy & module specifications (GoldSweep, AI Trade, V1)
+│   ├── plans/                   # Action plans & roadmaps (SB Rescue, AI Upgrade, Forward Demo)
+│   ├── audits/                  # Audits & technical research (OPT Fix, Consistency, Audits)
+│   ├── research/                # Experimental EA studies (Kim La, Wonderwhales, etc.)
+│   └── archive/v1/              # Superseded legacy documents, read-only history
 ├── MQL5/
 │   ├── Experts/                 # EA main files: TM_TrendFollowerScalper, TM_SessionBreakout (.mq5/.ex5)
 │   └── Include/TM_EA/           # Modular EA components (.mqh)

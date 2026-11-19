@@ -6,8 +6,8 @@
 **EA tạm gác (Archived/On Hold):** TM_TrendFollowerScalper v2.0 (thua 6/6, hardcode server hour)  
 **Platform:** MetaTrader 5 / MQL5  
 **Symbol / TF:** XAUUSD (XAUUSDm) / H1 (SB) & M5  
-**Last updated:** 2026-11-19 (v4.4 - Rescue SB & Spec Gold Scalper)  
-**Status:** **v4.4** — **Cứu TM_SessionBreakout (P0)**: Backtest 3Y (PF 1.666, DD 7.9%, walk-forward 3/3 năm dương) là edge duy nhất có bằng chứng đáng bảo vệ. Ưu tiên số 1 là sửa **A1 (GMT Offset tự động)** + **A2 (Log mọi nhánh skip, chấm dứt im lặng)** + A3/A4/A5 để lệnh xuất hiện trên Demo tuần tới. **Tạm gác TM_TrendFollowerScalper v2.0** (thua 6/6, bom hẹn giờ server hour). **Quy hoạch TM_GoldSweepScalper** (9 module theo `docs/2026.11.19/SPEC_GOLD_SCALPER.md`). Kế hoạch chi tiết tại `docs/2026.11.19/OPT_TM_EA_FIX.md` và `docs/ACTION_PLAN_2026_11_19.md`.
+**Last updated:** 2026-11-19 (v4.7 - AI Trade Orchestrator Spec & Roadmap)  
+**Status:** **v4.7** — **Chuẩn hóa Kiến trúc AI Trade Orchestrator**: Hoàn thiện đặc tả 5 tầng trong [SPEC_AI_TRADE_MODULE.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_AI_TRADE_MODULE.md) và Kế hoạch nâng cấp 4 giai đoạn tại [ACTION_PLAN_AI_TRADE.md](file:///d:/Applications/TM-EA/docs/plans/ACTION_PLAN_AI_TRADE.md). Duy trì song song **TM_SessionBreakout** (P0 đã cứu A1-A5, PF 1.527) và **TM_GoldSweepScalper** (v1.2 tối ưu London KZ 1Y dương PF 1.069, DD 7.39%). Mọi quyết định AI phải qua Hard RiskGate, không bao giờ override tầng an toàn. Toàn bộ tài liệu được sắp xếp khoa học tại [docs/README.md](file:///d:/Applications/TM-EA/docs/README.md).
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
 > Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  
@@ -24,7 +24,7 @@
 - **Chiến lược tạm gác: `TM_TrendFollowerScalper v2.0` (M5):**
   - Thua 6/6 vòng kiểm thử (PF 0.12 - 0.60), bị bẫy ma sát spread và rủi ro hard-code giờ server. Tạm gác để tập trung tài nguyên.
 - **Chiến lược dài hạn: `TM_GoldSweepScalper` (M5/H1):**
-  - Spec bot scalp XAUUSD ổn định ("bào sàn") tần suất thấp, chất lượng cao (rare-fire), 9 module chuẩn hóa (theo `docs/2026.11.19/SPEC_GOLD_SCALPER.md`).
+  - Spec bot scalp XAUUSD ổn định ("bào sàn") tần suất thấp, chất lượng cao (rare-fire), 9 module chuẩn hóa (theo `docs/specs/SPEC_GOLD_SCALPER.md`).
   - Edge kép: Liquidity Sweep Reversal + Opening-Range Breakout có kill-zone theo giờ GMT thật.
 - **Triết lý bất biến:** EA "ổn định" không phải là EA vào nhiều lệnh, mà là EA **biết tại sao nó không vào lệnh**. Không martingale, không grid, không averaging down. SL ban đầu bắt buộc. Log mọi lý do chặn + retcode.
 
@@ -38,13 +38,15 @@
 TM-EA/
 ├── README.md
 ├── docs/
-│   ├── USER_GUIDE.md           # Hướng dẫn sử dụng toàn diện từ A-Z cho người mới
+│   ├── README.md               # Bản đồ mục lục tra cứu toàn bộ tài liệu dự án
 │   ├── MASTER.md               # File này - nguồn tổng hợp + manual cho AI
-│   ├── ARCHITECTURE.md         # Brief triển khai (mục 2 Safety rules thắng khi xung đột)
-│   ├── SOURCE_SPEC_V1.md       # Nguồn yêu cầu chiến lược (single source of truth)
-│   ├── TECHNICAL_AUDIT.md      # P1: audit copy/shift/news/filling/riskguard
-│   ├── SOURCE_REPORT_CONSISTENCY.md # P0: đối chiếu MASTER ↔ source ↔ report
 │   ├── CHANGELOG.md            # Lịch sử thay đổi (định dạng §6.6)
+│   ├── ARCHITECTURE.md         # Brief triển khai (mục 2 Safety rules thắng khi xung đột)
+│   ├── USER_GUIDE.md           # Hướng dẫn sử dụng MT5 Tester & cài đặt
+│   ├── specs/                  # Đặc tả chiến lược (SPEC_GOLD_SCALPER, SPEC_AI_TRADE_MODULE...)
+│   ├── plans/                  # Kế hoạch hành động (ACTION_PLAN_2026_11_19, ACTION_PLAN_AI_TRADE...)
+│   ├── audits/                 # Báo cáo kiểm toán & phân tích (OPT_TM_EA_FIX, TECHNICAL_AUDIT...)
+│   ├── research/               # Tài liệu nghiên cứu EA thử nghiệm (Kim La, Wonderwhales...)
 │   └── archive/v1/             # Tài liệu cũ, chỉ để tham khảo, read-only
 ├── MQL5/
 │   ├── Experts/
@@ -222,7 +224,7 @@ Kiểm soát TP (Model=1, Oct 1–15): không-TP PF **3.39** > TP1.5 **2.47** > 
 
 ## 5. KẾ HOẠCH & CÁC BƯỚC THỰC HIỆN TIẾP THEO (CẬP NHẬT 2026-11-19)
 
-Lộ trình dự án được tái cấu trúc thành 4 giai đoạn ưu tiên theo `docs/2026.11.19/OPT_TM_EA_FIX.md` và `docs/2026.11.19/SPEC_GOLD_SCALPER.md`:
+Lộ trình dự án được tái cấu trúc thành 4 giai đoạn ưu tiên theo `docs/audits/OPT_TM_EA_FIX.md` và `docs/specs/SPEC_GOLD_SCALPER.md`:
 
 ```mermaid
 flowchart TD

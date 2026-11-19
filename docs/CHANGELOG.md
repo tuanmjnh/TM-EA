@@ -5,6 +5,17 @@
 ---
 
 ```yaml
+[2026-11-19] - v4.7 (STANDARDIZE SPEC_AI_TRADE_MODULE & AI ACTION PLAN)
+Thay doi:
+  - Chuan hoa toan dien tai lieu dac ta kien truc AI Trade Orchestrator (docs/SPEC_AI_TRADE_MODULE.md):
+    + Tai cau truc 5 tang modul (MT5 Execution Core -> MCP Bridge -> AI Orchestrator -> Knowledge Store -> Self-Evolution Loop).
+    + So do hoa Mermaid diagram va lap bang phan cong chi tiet cho tung tang.
+    + Xac lap hop dong JSON Schema chuan cho Multi-AI Committee (5-Tier Verdict: BUY, OVERWEIGHT, HOLD, UNDERWEIGHT, SELL) va cau truc du lieu SQLite results.db.
+    + Dinh nghia quy tac an toan bat bien Hard RiskGate va "AI Mutation Zone" dong bang code an toan MQL5.
+  - Xay dung Ke hoach Hanh dong Nang cap AI Trade chi tiet (docs/ACTION_PLAN_AI_TRADE.md):
+    + Lo trinh 4 giai doan: Phase 1 (Paper Trading 100 mau) -> Phase 2 (Hard RiskGate & Demo Cent) -> Phase 3 (Self-Evolution & Walk-Forward OOS) -> Phase 4 (Live Scaling).
+    + Thiet lap checklist nghiem thu va chi so do luong ky thuat ro rang.
+
 [2026-11-19] - v4.6 (OPTIMIZE TM_GOLDSWEEPSCALPER - LONDON KZ 1Y PROFITABLE BASELINE)
 Thay doi:
   - Toi uu hoa kien truc chien luoc TM_GoldSweepScalper qua 8 dot kiem dinh Model=4 (Real Ticks Exness):
