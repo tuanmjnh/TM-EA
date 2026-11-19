@@ -27,16 +27,19 @@ input group "=== GENERAL CONFIG ==="
 input bool              Enabled                 = true;
 input int               MagicNumber             = 777001;
 input string            TradeComment            = "TM_GSS_V1";
-input ENUM_TIMEFRAMES   Entry_TF                = PERIOD_M5; // Scalping execution timeframe
+input ENUM_TIMEFRAMES   Entry_TF                = PERIOD_CURRENT; // Scalping execution timeframe (CURRENT = chart timeframe)
 input ENUM_TIMEFRAMES   Regime_TF               = PERIOD_H1; // Higher timeframe regime (ADX H1)
 
 input group "=== TIMING & KILL-ZONES (GMT) ==="
 input int               BrokerGMTOffset         = 999;       // Broker GMT offset (999 = auto-detect)
-input bool              OnlyTradeInKillZones    = true;      // Only trade in London KZ & NY KZ
+input bool              OnlyTradeInKillZones    = true;      // Only trade in active Kill-Zones
+input bool              Enable_LondonKZ         = true;      // Trade London Kill-Zone (07:00 - 10:00 GMT)
+input bool              Enable_NYKZ             = true;      // Trade New York Kill-Zone (12:30 - 15:00 GMT)
 input bool              OneTradePerKillZone     = true;      // Max 1 trade per kill-zone (Rare-fire gating)
 
 input group "=== STRATEGY SETUPS ==="
 input bool              Enable_SweepReversal    = true;      // Setup A: Liquidity Sweep Reversal
+input bool              Sweep_OnlyMajor         = false;     // Only sweep Asia High/Low and PDH/PDL (Exclude minor swings)
 input double            Sweep_RR                = 2.0;       // Sweep R:R Target (1.5 - 2.5)
 input bool              Enable_ORB              = true;      // Setup B: Opening-Range Breakout
 input double            ORB_RR                  = 4.0;       // ORB R:R Target (3.0 - 5.0)
@@ -296,7 +299,7 @@ void OnTick()
    // Check Kill-Zones
    string zoneName = "";
    ENUM_KILL_ZONE kz = g_time.GetCurrentKillZone(now, zoneName);
-   bool inKZ = (kz == KZ_LONDON || kz == KZ_NEWYORK);
+   bool inKZ = ((kz == KZ_LONDON && Enable_LondonKZ) || (kz == KZ_NEWYORK && Enable_NYKZ));
 
    if(OnlyTradeInKillZones && !inKZ)
    {
@@ -347,7 +350,7 @@ void OnTick()
    SStrategySignal signal;
    string skipReason = "";
    bool hasSignal = g_strategy.Evaluate(g_liqMap, g_regime, g_time, atr_m5, adx_h1,
-                                        Sweep_RR, ORB_RR, Min_Range_ATR, Max_Range_ATR,
+                                        Sweep_RR, Sweep_OnlyMajor, ORB_RR, Min_Range_ATR, Max_Range_ATR,
                                         Enable_SweepReversal, Enable_ORB, signal, skipReason);
    if(!hasSignal)
    {

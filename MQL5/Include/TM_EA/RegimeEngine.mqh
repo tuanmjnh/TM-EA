@@ -55,8 +55,8 @@ public:
              const int minHoldBars = 3)
    {
       m_symbol = symbol;
-      m_tf = tf;
-      m_htf = htf;
+      m_tf = (tf == PERIOD_CURRENT ? _Period : tf);
+      m_htf = (htf == PERIOD_CURRENT ? _Period : htf);
       m_minHoldBars = minHoldBars;
 
       m_hEMA50  = iMA(m_symbol, m_tf, 50, 0, MODE_EMA, PRICE_CLOSE);

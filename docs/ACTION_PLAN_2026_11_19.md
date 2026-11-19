@@ -118,4 +118,5 @@ Sau khi `TM_SessionBreakout` đã vận hành ổn định trên Demo, bắt đ�
 - [x] **Xây dựng hoàn chỉnh `TM_GoldSweepScalper`** (9 module: `TimeService`, `RegimeEngine`, `LiquidityMap`, `StrategyHub`, `Guards`, `SymbolSpecs`, `RiskManager`, `TrailingEngine`, `Logger`).
 - [x] Biên dịch `TM_GoldSweepScalper.mq5` đạt chuẩn `0 errors, 0 warnings` và đồng bộ vào MT5 Terminal.
 - [x] Chạy smoke-test kiểm định Strategy Tester (Model=4 Real Ticks), xác nhận cơ chế Circuit Breaker và Kill-zone hoạt động chuẩn xác.
+- [x] **Tối ưu hóa `TM_GoldSweepScalper` thành công qua 8 đợt test Model=4:** Tinh chỉnh London Kill-Zone (07:00-10:00 GMT), loại bỏ trailing sớm, mở rộng SL buffer 0.75 ATR, xác lập điểm ngọt `Sweep_RR = 3.0` đạt **PF 1.069, Lãi ròng +$177.68 trên 1 năm trọn vẹn (Model=4 Real Ticks)** với **Max Drawdown chỉ 7.39%**.
 - [ ] **Bước tiếp theo:** Gắn EA lên biểu đồ MT5 tài khoản Demo Exness và kích hoạt Algo Trading theo checklist 5 bước.

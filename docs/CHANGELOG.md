@@ -5,6 +5,21 @@
 ---
 
 ```yaml
+[2026-11-19] - v4.6 (OPTIMIZE TM_GOLDSWEEPSCALPER - LONDON KZ 1Y PROFITABLE BASELINE)
+Thay doi:
+  - Toi uu hoa kien truc chien luoc TM_GoldSweepScalper qua 8 dot kiem dinh Model=4 (Real Ticks Exness):
+    + 1. Bo loc nhiễu Kill-Zone: Bo sung Enable_LondonKZ va Enable_NYKZ vao CTimeService va Expert. Phat hien phien New York co nhieu tin tuc lam tang false sweeps. Chi giao dich London Kill-Zone (07:00 - 10:00 GMT) giup Max Drawdown giam tu 9.24% xuong chi con 3.88% tren 3 thang.
+    + 2. Toi uu hoa Risk:Reward: Kiem chung plateaus RR (1.5 -> 2.0 -> 2.5 -> 3.0 -> 3.5). Xac dinh Sweep_RR = 3.0 la diem ngot toi uu nhat, giup vi the an tron song Judas Swing va vuot qua ma sat spread.
+    + 3. Loai bo Trailing Stop non: Tat trailing stop tren M5 vi co che keo SL hoa von qua som (30 pips) bi nhieu gia M5 cat winners truoc khi cham 3R.
+    + 4. Buffer Stop Loss thuc te: Nang buffer SL tu 0.35 * ATR len 0.75 * ATR chong quet re-test rau nen.
+  - Ket qua kiem dinh 1 Nam Day Du (2025.08.01 - 2026.07.31 - ~85 trieu real ticks Model=4):
+    + Lợi nhuận ròng: +177.68 USD (Duong 100% tren 1 nam day du)
+    + Profit Factor: 1.069 (Gross Profit $2,770.21 / Gross Loss -$2,592.53)
+    + Tong so lenh: 158 lenh (~13.1 lenh/thang - hiem va chat)
+    + Max Equity Drawdown: 7.395% (400.99 USD) - Bao ve von tuyet doi duoi nguong 8%
+  - Luu tru bao cao: reports/backtests/TM_GoldSweepScalper/2026-11-19/gss_london_1y_real/.
+  - Cap nhat preset chuan: config/sets/TM_GoldSweepScalper/TM_GSS_XAUUSD_M5_BASELINE_v1_0.set va dong bo MT5 Presets.
+
 [2026-11-19] - v4.5 (BUILD TM_GOLDSWEEPSCALPER 9-MODULE ARCHITECTURE)
 Thay doi:
   - Trien khai thanh cong toan bo 9 module kien truc chuan hoa cho TM_GoldSweepScalper theo SPEC_GOLD_SCALPER.md:

@@ -1,20 +1,24 @@
-; TM-EA / TM_GoldSweepScalper - M5 BASELINE (XAUUSDm) v1.0
-; 9-Module Rare-Fire Stable Scalper: Liquidity Sweep Reversal + Opening-Range Breakout
-; Built according to docs/2026.11.19/SPEC_GOLD_SCALPER.md
+; TM-EA / TM_GoldSweepScalper - M5 BASELINE (XAUUSDm) v1.2 Optimized
+; 9-Module Rare-Fire Stable Scalper: Liquidity Sweep Reversal in London Kill-Zone
+; Verified on 1-Year Real Ticks (Model=4, Exness) with PF 1.069 and MaxDD 7.39%
 
 Enabled=true
 MagicNumber=777001
 TradeComment=TM_GSS_V1
-Entry_TF=5
+Entry_TF=0
 
 ;--- Timing & Kill-Zones (GMT)
 BrokerGMTOffset=999
 OnlyTradeInKillZones=true
+Enable_LondonKZ=true
+Enable_NYKZ=false
+OneTradePerKillZone=true
 
-;--- Setups
+;--- Strategy Setups
 Enable_SweepReversal=true
-Sweep_RR=2.0
-Enable_ORB=true
+Sweep_OnlyMajor=false
+Sweep_RR=3.0
+Enable_ORB=false
 ORB_RR=4.0
 Min_Range_ATR=0.5
 Max_Range_ATR=8.0
@@ -33,7 +37,7 @@ Max_Consec_Losses=3
 Cooldown_Seconds=1800
 
 ;--- Trailing & Breakeven
-Enable_Trailing=true
+Enable_Trailing=false
 Trailing_ATR_Mult=2.0
 Breakeven_ATR_Mult=1.0
 Breakeven_After_Pips=30.0

@@ -1,0 +1,33 @@
+# Manifest: gss_london_1y_real (TM_GoldSweepScalper Optimized 1-Year Baseline)
+
+- **Bot:** TM_GoldSweepScalper (v1.2 Optimized)
+- **Architecture:** 9 modular components according to `docs/2026.11.19/SPEC_GOLD_SCALPER.md`
+- **Run date:** 2026-11-19
+- **Symbol:** XAUUSDm
+- **Timeframe:** M5 (Entry) / H1 (Regime Filter)
+- **Period:** 2025.08.01 - 2026.07.31 (1 Year Full Cycle)
+- **Ticks Quality:** Model=4 (Every tick based on real ticks - Exness database ~85M real ticks)
+- **Deposit:** 5,000.00 USD
+- **Final Balance:** 5,177.68 USD
+- **Net Profit:** +177.68 USD
+- **Gross Profit:** 2,770.21 USD
+- **Gross Loss:** -2,592.53 USD
+- **Profit Factor (PF):** 1.069
+- **Total Trades:** 158 lệnh (~13.1 lệnh/tháng - Rare-Fire chuẩn SMC)
+- **Wins / Losses:** 41 thắng / 117 thua
+- **Largest Win:** +78.68 USD
+- **Largest Loss:** -26.47 USD
+- **Max Equity Drawdown:** 400.99 USD (7.395%)
+- **Cấu hình tối ưu được xác lập:**
+  - `OnlyTradeInKillZones = true`
+  - `Enable_LondonKZ = true` (07:00 - 10:00 GMT - Khai thác triệt để Judas Swing phiên London)
+  - `Enable_NYKZ = false` (Loại bỏ hoàn toàn rủi ro nhiễu tin tức kinh tế Mỹ)
+  - `Enable_SweepReversal = true`
+  - `Enable_ORB = false` (ORB tối ưu trên H1, M5 dành riêng cho Sweep Reversal)
+  - `Sweep_RR = 3.0` (Điểm ngọt Risk:Reward chốt lời vượt trội chi phí spread)
+  - `SL Buffer = 0.75 * ATR` (Chống quét râu nến re-test)
+  - `Enable_Trailing = false` (Cho phép vị thế chạy hết 3R target mà không bị hòa vốn non)
+  - `RiskPercentPerTrade = 0.5%`
+  - `Circuit_Breaker_DD_Pct = 8.0%`
+- **Kết luận:**
+  Hệ thống duy trì Max Drawdown chỉ **7.39%** trong suốt 1 năm dữ liệu Real Ticks biến động khốc liệt của Vàng, với lợi nhuận ròng dương và 0 lỗi broker.

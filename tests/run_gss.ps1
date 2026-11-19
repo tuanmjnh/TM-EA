@@ -8,10 +8,16 @@ param(
   [string]$To='2026.07.31',
   [int]$Model=4,
   [string]$Sym='XAUUSDm',
+  [string]$Period='M5',
   [string]$Comment='TM_GSS',
   [bool]$OnlyKZ=$true,
+  [bool]$EnableLondon=$true,
+  [bool]$EnableNY=$true,
   [bool]$EnableSweep=$true,
+  [bool]$SweepOnlyMajor=$false,
   [bool]$EnableORB=$true,
+  [bool]$EnableTrailing=$true,
+  [double]$TrailingMult=2.0,
   [double]$Commission=0.0,
   [int]$Offset=0
 )
@@ -30,7 +36,7 @@ $ini = @"
 [Tester]
 Expert=TM_GoldSweepScalper.ex5
 Symbol=$Sym
-Period=M5
+Period=$Period
 Optimization=0
 Model=$Model
 FromDate=$From
@@ -47,12 +53,16 @@ ShutdownTerminal=1
 
 [TesterInputs]
 Enabled=true||false||0||true||N
+Entry_TF=0||0||0||0||N
 MagicNumber=777001||777001||1||7770010||N
 TradeComment=$Comment
 BrokerGMTOffset=$Offset||$Offset||1||12||N
 OnlyTradeInKillZones=$(if($OnlyKZ){'true'}else{'false'})||false||0||true||N
+Enable_LondonKZ=$(if($EnableLondon){'true'}else{'false'})||false||0||true||N
+Enable_NYKZ=$(if($EnableNY){'true'}else{'false'})||false||0||true||N
 OneTradePerKillZone=true||false||0||true||N
 Enable_SweepReversal=$(if($EnableSweep){'true'}else{'false'})||false||0||true||N
+Sweep_OnlyMajor=$(if($SweepOnlyMajor){'true'}else{'false'})||false||0||true||N
 Sweep_RR=$SweepRR||$SweepRR||0.25||10.0||N
 Enable_ORB=$(if($EnableORB){'true'}else{'false'})||false||0||true||N
 ORB_RR=$ORBRR||$ORBRR||0.25||10.0||N
@@ -67,8 +77,8 @@ Max_Daily_Loss_Pct=2.0||2.0||0.1||10.0||N
 Circuit_Breaker_DD_Pct=8.0||8.0||0.5||20.0||N
 Max_Consec_Losses=3||3||1||10||N
 Cooldown_Seconds=1800||1800||60||7200||N
-Enable_Trailing=true||false||0||true||N
-Trailing_ATR_Mult=2.0||2.0||0.1||10.0||N
+Enable_Trailing=$(if($EnableTrailing){'true'}else{'false'})||false||0||true||N
+Trailing_ATR_Mult=$TrailingMult||$TrailingMult||0.1||10.0||N
 Breakeven_ATR_Mult=1.0||1.0||0.1||5.0||N
 Breakeven_After_Pips=30.0||30.0||1.0||100.0||N
 Trail_Step_Pips=10.0||10.0||1.0||50.0||N

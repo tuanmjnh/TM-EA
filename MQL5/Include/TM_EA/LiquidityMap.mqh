@@ -54,7 +54,7 @@ public:
    bool Init(const string symbol, const ENUM_TIMEFRAMES tf = PERIOD_M5)
    {
       m_symbol = symbol;
-      m_tf = tf;
+      m_tf = (tf == PERIOD_CURRENT ? _Period : tf);
       return true;
    }
 
@@ -119,6 +119,7 @@ public:
 
    // Detect Setup A: Liquidity Sweep Reversal
    bool CheckSweepReversal(const double atr,
+                           const bool onlyMajor,
                            int &outDirection,
                            double &outEntry,
                            double &outStopLoss,
@@ -162,7 +163,7 @@ public:
       if(m_pdl > 0.0)     { candidateLowLevels[lowCount] = m_pdl;     lowLevelNames[lowCount] = "PDL";      lowCount++; }
 
       double swingH = 0.0, swingL = 0.0;
-      if(GetRecentSwings(25, swingH, swingL) && swingL > 0.0)
+      if(!onlyMajor && GetRecentSwings(25, swingH, swingL) && swingL > 0.0)
       {
          candidateLowLevels[lowCount] = swingL; lowLevelNames[lowCount] = "Swing Low"; lowCount++;
       }
@@ -179,7 +180,7 @@ public:
             outDirection = 1; // BUY
             outEntry = ask;
             double sweepExtreme = MathMin(l1, l2);
-            outStopLoss = sweepExtreme - (0.35 * atr);
+            outStopLoss = sweepExtreme - (0.75 * atr);
             outLevelPrice = lvl;
             outReason = StringFormat("Bullish Sweep of %s (%.2f) | Pen=%.2f Reclaim=%.2f",
                                      lowLevelNames[i], lvl, penetration, c1);
@@ -194,7 +195,7 @@ public:
 
       if(m_asiaHigh > 0.0) { candidateHighLevels[highCount] = m_asiaHigh; highLevelNames[highCount] = "Asia High"; highCount++; }
       if(m_pdh > 0.0)      { candidateHighLevels[highCount] = m_pdh;      highLevelNames[highCount] = "PDH";       highCount++; }
-      if(swingH > 0.0)     { candidateHighLevels[highCount] = swingH;     highLevelNames[highCount] = "Swing High"; highCount++; }
+      if(!onlyMajor && swingH > 0.0) { candidateHighLevels[highCount] = swingH; highLevelNames[highCount] = "Swing High"; highCount++; }
 
       for(int i = 0; i < highCount; i++)
       {
@@ -208,7 +209,7 @@ public:
             outDirection = -1; // SELL
             outEntry = bid;
             double sweepExtreme = MathMax(h1, h2);
-            outStopLoss = sweepExtreme + (0.35 * atr);
+            outStopLoss = sweepExtreme + (0.75 * atr);
             outLevelPrice = lvl;
             outReason = StringFormat("Bearish Sweep of %s (%.2f) | Pen=%.2f Reclaim=%.2f",
                                      highLevelNames[i], lvl, penetration, c1);

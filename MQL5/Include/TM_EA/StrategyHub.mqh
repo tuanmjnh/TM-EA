@@ -38,7 +38,7 @@ public:
    bool Init(const string symbol, const ENUM_TIMEFRAMES tf = PERIOD_M5)
    {
       m_symbol = symbol;
-      m_tf = tf;
+      m_tf = (tf == PERIOD_CURRENT ? _Period : tf);
       return true;
    }
 
@@ -48,6 +48,7 @@ public:
                  const double atr,
                  const double adx,
                  const double sweepRR,
+                 const bool sweepOnlyMajor,
                  const double orbRR,
                  const double minRangeATR,
                  const double maxRangeATR,
@@ -76,7 +77,7 @@ public:
          double sweepEntry = 0.0, sweepSL = 0.0, sweepLevel = 0.0;
          string sweepReason = "";
 
-         if(liqMap.CheckSweepReversal(atr, sweepDir, sweepEntry, sweepSL, sweepLevel, sweepReason))
+         if(liqMap.CheckSweepReversal(atr, sweepOnlyMajor, sweepDir, sweepEntry, sweepSL, sweepLevel, sweepReason))
          {
             // Regime Filter Confirmation for Sweep:
             // Sweep is highly profitable in RANGE or when fading a sweep that aligned with broader trend
