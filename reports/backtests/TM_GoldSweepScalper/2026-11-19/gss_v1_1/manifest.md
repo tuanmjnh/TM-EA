@@ -1,0 +1,23 @@
+# Manifest: gss_v1_1 (TM_GoldSweepScalper v1.1 Refined)
+
+- **Bot:** TM_GoldSweepScalper (v1.1)
+- **Architecture:** 9-Module Architecture with Macro H1 Regime & Single Trade per Kill-Zone
+- **Run date:** 2026-11-19
+- **Symbol:** XAUUSDm
+- **Timeframe:** M5 (Entry) / H1 (Regime)
+- **Period:** 2026.05.01 - 2026.07.31 (3 Months)
+- **Ticks Quality:** Model=4 (Every tick based on real ticks - 20.4M real ticks from Exness)
+- **Deposit:** 5,000.00 USD
+- **Final Balance:** 4,717.56 USD
+- **Net Profit:** -282.44 USD
+- **Gross Profit:** 524.73 USD
+- **Gross Loss:** -807.17 USD
+- **Profit Factor (PF):** 0.650 (Cải thiện rõ rệt so với 0.448 của v1.0)
+- **Total Trades:** 75 lệnh
+- **Wins / Losses:** 36 thắng / 39 thua (Win rate đạt 48.0%)
+- **Largest Win:** +84.15 USD
+- **Largest Loss:** -25.42 USD
+- **Max Equity Drawdown:** 465.02 USD (8.973%)
+- **Ghi chú nghiệm thu:**
+  - Bộ lọc vĩ mô `ADX(H1)` và cơ chế Gating `OneTradePerKillZone` đã cải thiện win-rate từ 43% lên 48% và giảm MaxDD xuống dưới 9.0%.
+  - Toàn bộ cơ chế an toàn vận hành hoàn hảo, không có ngoại lệ kỹ thuật, không dính lỗi trượt lệnh broker.

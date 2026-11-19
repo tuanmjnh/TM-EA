@@ -1,0 +1,18 @@
+key;value
+symbol;XAUUSDm
+expert;TM_GoldSweepScalper
+end_time;2026.07.30 23:59:58
+deposit;5000.00
+final_balance;4671.00
+net_profit;-329.00
+gross_profit;266.89
+gross_loss;-595.89
+profit_factor;0.448
+trades;51
+wins;22
+losses;29
+largest_win;126.21
+largest_loss;-25.84
+max_consec_losses;4
+max_equity_dd_abs;475.74
+max_equity_dd_pct;9.244

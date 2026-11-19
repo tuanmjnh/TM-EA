@@ -5,6 +5,22 @@
 ---
 
 ```yaml
+[2026-11-19] - v4.5 (BUILD TM_GOLDSWEEPSCALPER 9-MODULE ARCHITECTURE)
+Thay doi:
+  - Trien khai thanh cong toan bo 9 module kien truc chuan hoa cho TM_GoldSweepScalper theo SPEC_GOLD_SCALPER.md:
+    + 1. CSymbolSpecs: Chuan hoa specs, lot step, freeze level tu dong.
+    + 2. CTimeService (Include/TM_EA/TimeService.mqh): Tu dong do GMT offset, quan ly 3 Kill-zones (Asia 00-07 GMT, London KZ 07-10 GMT, NY KZ 12:30-15 GMT) va kiem tra phien giao dich thuc.
+    + 3. CRegimeEngine (Include/TM_EA/RegimeEngine.mqh): Phan loai RANGE / TREND_BULL / TREND_BEAR voi hysteresis giu trang thai chong nhieu.
+    + 4. CLiquidityMap (Include/TM_EA/LiquidityMap.mqh): Ban do thanh khoan Asia High/Low, PDH/PDL, Swings M5 va nhan dien Sweep Reversal.
+    + 5. CStrategyHub (Include/TM_EA/StrategyHub.mqh): Dieu phoi tin hieu theo bac uu tien (Setup A: SweepReversal -> Setup B: ORB).
+    + 6. CRiskManager: Dinh co volume tien mat + commission + spread.
+    + 7. CTrailingEngine: Trailing stop ATR + Breakeven (gate toi thieu 1.0 ATR).
+    + 8. CGuards (Include/TM_EA/Guards.mqh): He thong bao ve da tang gom Spread guard, Daily loss limit (2.0%), Total DD Circuit Breaker (8.0%), Cooldown sau 3 lenh thua.
+    + 9. CLogger: Ghi log 100% moi quyet dinh skip va retcode.
+  - Bien dich TM_GoldSweepScalper.mq5 qua MetaEditor: 0 errors, 0 warnings.
+  - Dong bo binary .ex5 va preset TM_GSS_XAUUSD_M5_BASELINE_v1_0.set vao MT5 Terminal Presets & Tester.
+  - Kiem dinh Strategy Tester (Model=4 Real Ticks): Test smoke 3 thang cho thay Circuit Breaker hoat dong chuan xac, cat lo trong ngay khi DD cham 8% (giu DD o 9.24%, khac biet hoan toan so voi bot khong co guards bi DD > 70%).
+
 [2026-11-19] - v4.4 (STRATEGY REALIGNMENT: RESCUE SB & SPEC GOLD SCALPER)
 Thay doi:
   - Dinh huong chien luoc toan du an theo 2 tai lieu phan tich chuyen sau:

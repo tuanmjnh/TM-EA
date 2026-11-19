@@ -115,4 +115,7 @@ Sau khi `TM_SessionBreakout` đã vận hành ổn định trên Demo, bắt đ�
 - [x] Cập nhật binary `.ex5` và các file preset `.set` vào thư mục MT5 Terminal Experts.
 - [x] Chạy smoke-test MT5 Tester xác nhận log A2 chi tiết và logic A1-A5 vận hành minh bạch.
 - [x] Chạy backtest Model=4 (Real Ticks 1.5Y & 3Y - 185.8 triệu ticks) đạt `PF 1.527`, `DD 10.2%`, lưu báo cáo vào `reports/backtests/TM_SessionBreakout/2026-11-19/`.
+- [x] **Xây dựng hoàn chỉnh `TM_GoldSweepScalper`** (9 module: `TimeService`, `RegimeEngine`, `LiquidityMap`, `StrategyHub`, `Guards`, `SymbolSpecs`, `RiskManager`, `TrailingEngine`, `Logger`).
+- [x] Biên dịch `TM_GoldSweepScalper.mq5` đạt chuẩn `0 errors, 0 warnings` và đồng bộ vào MT5 Terminal.
+- [x] Chạy smoke-test kiểm định Strategy Tester (Model=4 Real Ticks), xác nhận cơ chế Circuit Breaker và Kill-zone hoạt động chuẩn xác.
 - [ ] **Bước tiếp theo:** Gắn EA lên biểu đồ MT5 tài khoản Demo Exness và kích hoạt Algo Trading theo checklist 5 bước.

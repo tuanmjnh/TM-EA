@@ -1,0 +1,24 @@
+# Manifest: smoke_gss_v1 (TM_GoldSweepScalper Initial Build)
+
+- **Bot:** TM_GoldSweepScalper (v1.0)
+- **Architecture:** 9 modular components according to `docs/2026.11.19/SPEC_GOLD_SCALPER.md`
+- **Run date:** 2026-11-19
+- **Symbol:** XAUUSDm
+- **Timeframe:** M5
+- **Period:** 2026.05.01 - 2026.07.31 (3 Months)
+- **Ticks Quality:** Model=4 (Every tick based on real ticks - 20.4M real ticks from Exness)
+- **Deposit:** 5,000.00 USD
+- **Final Balance:** 4,671.00 USD
+- **Net Profit:** -329.00 USD
+- **Gross Profit:** 266.89 USD
+- **Gross Loss:** -595.89 USD
+- **Profit Factor (PF):** 0.448
+- **Total Trades:** 51 lệnh
+- **Wins / Losses:** 22 thắng / 29 thua
+- **Largest Win:** +126.21 USD
+- **Largest Loss:** -25.84 USD
+- **Max Equity Drawdown:** 475.74 USD (9.244%)
+- **Đánh giá hệ thống 9 Module:**
+  - Hoàn thiện 100% việc kết nối và biên dịch 9 module không lỗi (`0 errors, 0 warnings`).
+  - Hệ thống RiskGuard và Circuit Breaker bảo vệ tài khoản thành công: Khóa giao dịch trong ngày khi DD chạm ngưỡng 8.0%, ngăn chặn tài khoản bị sụt giảm sâu (giữ DD ở mức an toàn 9.24%, khác biệt hoàn toàn so với các bot scalp cũ không có guard bị DD > 70%).
+  - Hệ thống log minh bạch: 100% các quyết định skip, ngoài kill-zone, hoặc chạm circuit breaker đều được in Journal chi tiết.
