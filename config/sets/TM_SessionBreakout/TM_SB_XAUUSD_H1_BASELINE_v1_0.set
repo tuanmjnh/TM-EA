@@ -1,14 +1,15 @@
-; TM-EA / TM_SessionBreakout - H1 BASELINE (XAUUSDm)
+; TM-EA / TM_SessionBreakout - H1 BASELINE (XAUUSDm) v4.4
 ; Range-breakout by session. Validated 3Y real-tick: PF 1.666, DD 7.9%, walk-forward 3/3 years positive.
 ; Capital: >= ~5000 USD real, or a Cent (USC) account. RESEARCH CANDIDATE - not confirmed for live.
-; Range = Asian session 00:00-07:00 (server). Entry 07:00-20:00. One trade/day. No second session.
+; Range = Asian session 00:00-07:00 (GMT). Entry 07:00-20:00 (GMT). One trade/day. No second session.
 
 Enabled=true
 MagicNumber=555001
 TradeComment=TM_SB_H1
 Entry_TF=16385
 
-;--- Session 1 range / window (server hours)
+;--- Session 1 range / window (GMT hours) + Auto GMT offset
+BrokerGMTOffset=999
 RangeStartHour=0
 RangeEndHour=7
 TradeStartHour=7
@@ -33,6 +34,7 @@ OneTradePerDay=true
 
 ;--- Risk / execution
 RiskPercentPerTrade=1.0
+CommissionPerLot=0.0
 Min_Volume=0.01
 Max_Volume=0.50
 Max_Spread_Points=350

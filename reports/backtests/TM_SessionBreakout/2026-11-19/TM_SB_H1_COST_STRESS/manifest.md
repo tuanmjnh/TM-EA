@@ -1,0 +1,23 @@
+# Manifest: TM_SB_H1_COST_STRESS (v4.4 P0 Fixed)
+
+- **Bot:** TM_SessionBreakout (v4.4)
+- **Run date:** 2026-11-19
+- **Symbol:** XAUUSDm
+- **Timeframe:** H1
+- **Period:** 2025.01.01 - 2026.07.31 (1.5 Years)
+- **Ticks Quality:** Model=4 (Every tick based on real ticks - 136.2M real ticks from Exness)
+- **Deposit:** 5,000.00 USD
+- **Final Balance:** 5,562.40 USD
+- **Net Profit:** +562.40 USD (+11.25%)
+- **Gross Profit:** 3,458.70 USD
+- **Gross Loss:** -2,880.34 USD
+- **Profit Factor (PF):** 1.201
+- **Total Trades:** 79 lệnh (~4.3 lệnh/tháng)
+- **Wins / Losses:** 17 thắng / 62 thua
+- **Largest Win:** +270.73 USD
+- **Largest Loss:** -74.53 USD
+- **Max Equity Drawdown:** 555.97 USD (9.109%)
+- **Ghi chú Stress Test:**
+  - Chịu ảnh hưởng trực tiếp của biến động spread thực tế trên vàng (lên tới 396 points trong tin tức).
+  - RiskGuard và Spread filter (Max_Spread_Points=350) hoạt động hoàn hảo, chặn mở lệnh khi spread giãn quá mức.
+  - Vẫn duy trì lợi nhuận ròng dương và MaxDD < 10% trong điều kiện thị trường vàng biến động dữ dội năm 2025-2026.

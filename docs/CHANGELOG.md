@@ -5,6 +5,26 @@
 ---
 
 ```yaml
+[2026-11-19] - v4.4 (STRATEGY REALIGNMENT: RESCUE SB & SPEC GOLD SCALPER)
+Thay doi:
+  - Dinh huong chien luoc toan du an theo 2 tai lieu phan tich chuyen sau:
+    + docs/2026.11.19/OPT_TM_EA_FIX.md (Phan tich & ke hoach sua loi P0 cho TM_SessionBreakout).
+    + docs/2026.11.19/SPEC_GOLD_SCALPER.md (Spec 9 module cho bot scalp vang on dinh TM_GoldSweepScalper).
+  - P0 Rescue TM_SessionBreakout (SB):
+    + Uu tien hang dau la cuu SB de chay forward tren demo. Backtest 3Y (PF 1.666, DD 7.9%, 3/3 nam duong)
+      la edge duy nhat co chung cu thong ke dang tin cay cua du an.
+    + Xac dinh nguyen nhan SB khong vao lenh tren Demo: Hard-code gio server (lech gio mo cua London/NY khi
+      server Exness o GMT+2/GMT+3) va logic log im lang (silent return false khong ghi nguyen nhan).
+    + Lap ke hoach sua 5 diem then chot: A1 (tu do BrokerGMTOffset), A2 (log moi nhanh skip), A3 (tinh phi/commission
+      vao sizing), A4 (tu chon SYMBOL_FILLING_MODE tranh retcode 10030), A5 (fix gating H1 va indicator warmup).
+  - Tam gac TM_TrendFollowerScalper v2.0:
+    + Do thua 6/6 vong toi uu ngoai mau (PF 0.12 - 0.60), roi vao bay spread ma sat khi chay tren M5 va
+      hard-code gio server lech phien MQL5.
+  - Quy hoach dai han TM_GoldSweepScalper:
+    + Kien truc 9 module doc lap, edge kep SweepReversal + Opening-Range Breakout co kill-zone gio GMT that.
+  - Cap nhat he thong tai lieu: MASTER.md, CHANGELOG.md, FORWARD_DEMO_PLAN.md va khoi tao ACTION_PLAN_2026_11_19.md.
+Quyet dinh: Tap trung nguon luc sua A1-A5 cho TM_SessionBreakout, verify Journal tren Demo Exness, san sang cho tuan toi.
+
 [2026-11-16] - v4.3 (LIQUIDITY SWEEP REVERSAL)
 Thay doi: build TM_SweepReversal.mq5 (bar dong pha swing roi dong lai vao trong -> dao chieu; SL ngoai
   dinh/day quet; trail ATR; loc HTF EMA; risk; ><). Compile 0/0. Runner tests/run_sweep.ps1.

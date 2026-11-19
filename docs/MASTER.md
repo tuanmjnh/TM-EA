@@ -1,12 +1,13 @@
 # TM-EA - MASTER DOC & AI OPERATING MANUAL
 
 **Project:** TM-EA  
-**EA:** TM_TrendFollowerScalper  
-**Strategy:** TM_TFS_V1  
+**EA chính hiện tại (P0):** TM_SessionBreakout (SB) — Đang sửa lỗi GMT & Logging để cứu chạy Demo  
+**EA nghiên cứu mới (Dài hạn):** TM_GoldSweepScalper (Spec 9 module ổn định)  
+**EA tạm gác (Archived/On Hold):** TM_TrendFollowerScalper v2.0 (thua 6/6, hardcode server hour)  
 **Platform:** MetaTrader 5 / MQL5  
-**Symbol / TF:** XAUUSD (XAUUSDm) / M5  
-**Last updated:** 2026-11-12 (v2.0 strategy change)  
-**Status:** **v3.9** — SB **đã đóng băng** (set + preset Cent + kế hoạch forward). `TM_SessionBreakout` (SB) chốt cấu hình XAU: **H1 · range 00–07 · vào 07–20 · ADX(H1)≥20 · SL=range · RR5 · 1 lệnh/ngày** → 3Y PF **1.666**, DD **7.9%**, walk-forward **3/3 năm dương**. Đã sửa **bug SL_Range_Fraction** (đã bác bỏ bảng frac cũ + 2 bẫy overfit NY/frac1.25). Preset: `config/sets/TM_SessionBreakout/`. **Chưa xác nhận** cho tiền thật (commission/slippage chưa model thật, mẫu nhỏ, chưa test symbol khác). EA trend cũ: thua 6/6 vòng. `CHANGELOG.md` (v3.4).
+**Symbol / TF:** XAUUSD (XAUUSDm) / H1 (SB) & M5  
+**Last updated:** 2026-11-19 (v4.4 - Rescue SB & Spec Gold Scalper)  
+**Status:** **v4.4** — **Cứu TM_SessionBreakout (P0)**: Backtest 3Y (PF 1.666, DD 7.9%, walk-forward 3/3 năm dương) là edge duy nhất có bằng chứng đáng bảo vệ. Ưu tiên số 1 là sửa **A1 (GMT Offset tự động)** + **A2 (Log mọi nhánh skip, chấm dứt im lặng)** + A3/A4/A5 để lệnh xuất hiện trên Demo tuần tới. **Tạm gác TM_TrendFollowerScalper v2.0** (thua 6/6, bom hẹn giờ server hour). **Quy hoạch TM_GoldSweepScalper** (9 module theo `docs/2026.11.19/SPEC_GOLD_SCALPER.md`). Kế hoạch chi tiết tại `docs/2026.11.19/OPT_TM_EA_FIX.md` và `docs/ACTION_PLAN_2026_11_19.md`.
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
 > Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  
@@ -16,13 +17,16 @@
 
 ## 1. TỔNG QUAN DỰ ÁN
 
-- EA scalp khung nhỏ, trend-following, nhắm tài khoản nhỏ (từ ~50 USD, khuyến nghị 50-200 USD). Không cam kết 50 USD đủ cho mọi symbol/broker.
-- Xác định trend bằng bộ lọc khung lớn (EMA nhanh/chậm + ADX), chỉ vào lệnh theo chiều trend.
-- Vào lệnh theo **pullback** ở khung nhỏ (v2.0: Breakout đã bị bỏ).
-- **Có Take Profit** (v2.0, `Use_TP=true`, `TP_ATR_Mult`) kết hợp **trailing stop động**. Trước v2.0 chiến lược không có TP.
-- **SL ban đầu bắt buộc** cho mọi vị thế.
-- Triết lý: không đoán đỉnh/đáy, cắt lỗ nhanh khi sai, để lệnh đúng chạy tới khi chạm trailing. Chấp nhận winrate thấp (35-45%) bù bằng lệnh thắng lớn.
-- Ưu tiên giảm rủi ro tuyệt đối: SL luôn bật, giới hạn thua/ngày, news filter, chặn spread lớn.
+- **Chiến lược P0 cứu cánh (Cấp bách): `TM_SessionBreakout` (H1, Asian Range Breakout):**
+  - Edge duy nhất có kiểm chứng 3 năm (PF 1.666, DD 7.9%, 3/3 năm dương, tần suất ~1 lệnh/ngày).
+  - Vấn đề cốt lõi trên Demo: Không vào lệnh do **hard-code giờ server (lệch GMT)** và **log im lặng (silent returns)**.
+  - Hành động P0: Sửa A1 (tự dò GMT offset), A2 (log mọi nhánh skip), A3 (sizing & cost), A4 (dynamic filling mode), A5 (warmup & gating). Mục tiêu: Lệnh xuất hiện minh bạch trên Forward Demo ngay tuần tới.
+- **Chiến lược tạm gác: `TM_TrendFollowerScalper v2.0` (M5):**
+  - Thua 6/6 vòng kiểm thử (PF 0.12 - 0.60), bị bẫy ma sát spread và rủi ro hard-code giờ server. Tạm gác để tập trung tài nguyên.
+- **Chiến lược dài hạn: `TM_GoldSweepScalper` (M5/H1):**
+  - Spec bot scalp XAUUSD ổn định ("bào sàn") tần suất thấp, chất lượng cao (rare-fire), 9 module chuẩn hóa (theo `docs/2026.11.19/SPEC_GOLD_SCALPER.md`).
+  - Edge kép: Liquidity Sweep Reversal + Opening-Range Breakout có kill-zone theo giờ GMT thật.
+- **Triết lý bất biến:** EA "ổn định" không phải là EA vào nhiều lệnh, mà là EA **biết tại sao nó không vào lệnh**. Không martingale, không grid, không averaging down. SL ban đầu bắt buộc. Log mọi lý do chặn + retcode.
 
 ---
 
@@ -216,59 +220,60 @@ Kiểm soát TP (Model=1, Oct 1–15): không-TP PF **3.39** > TP1.5 **2.47** > 
 
 ---
 
-## 5. KẾ HOẠCH & CÁC BƯỚC THỰC HIỆN TIẾP THEO
+## 5. KẾ HOẠCH & CÁC BƯỚC THỰC HIỆN TIẾP THEO (CẬP NHẬT 2026-11-19)
 
-Các bước cần được thực hiện theo đúng trình tự ưu tiên sau:
+Lộ trình dự án được tái cấu trúc thành 4 giai đoạn ưu tiên theo `docs/2026.11.19/OPT_TM_EA_FIX.md` và `docs/2026.11.19/SPEC_GOLD_SCALPER.md`:
 
 ```mermaid
 flowchart TD
-    S1["Bước 1: Cost-Stress Testing<br>(Spread thực + Com + News ON)"] --> S2{"Kết quả có lãi<br>sau chi phí?"}
-    S2 -- "Không" --> S1_Fix["Khắc phục/Cân chỉnh lại<br>Trailing & Filter"]
-    S1_Fix --> S1
-    S2 -- "Có" --> S3["Bước 2: Cân chỉnh vốn thực tế<br>(Vốn 200-500 USD, Risk 0.5-1%)"]
-    S3 --> S4["Bước 3 (v2.0): Pullback-only + TP +<br>equity circuit breaker đã sửa code"]
-    S4 --> S5["Bước 4: Forward Test Demo<br>(Chạy 2-4 tuần VPS/demo)"]
-    S5 --> S6["Bước 5: Thẩm định Go-Live<br>(Checklist an toàn trước khi vào vốn thật)"]
+    P1["Phase 1: Sửa lỗi P0 TM_SessionBreakout<br>(GMT auto-offset + Verbose Skip Logging)"] --> P2["Phase 2: Stress-test chi phí thực tế<br>(Model=4, Real-ticks 3Y, com+swap+spread)"]
+    P2 --> P3["Phase 3: Forward Test Demo Tuần tới<br>(Cent/Standard, verify log SB skip)"]
+    P3 --> P4["Phase 4: R&D TM_GoldSweepScalper<br>(9 module chuẩn hóa, Sweep + ORB kill-zone)"]
 ```
 
-### Bước 0: Sửa lỗi kỹ thuật trước khi test lại (blockers)
-- [ ] BUG-006: Biên dịch lại EX5 sau khi `RiskGuard.mqh` đổi; ghi compile log + hash mới.
-- [ ] BUG-001: Quyết định `ATR_Channel_Period` cho breakout (hoặc bỏ input, ghi rõ).
-- [ ] BUG-002: Chọn filling mode động từ `SYMBOL_FILLING_MODE`; xử lý retcode/partial.
-- [ ] BUG-003: Persist `m_lastProcessedDeal` để consecutive-loss idempotent qua restart.
-- [ ] BUG-004: Xây historical news adapter cho Strategy Tester (P1.5).
-- [ ] BUG-005/009: Dọn report trùng & sai thư mục (chỉ đổi metadata; giữ file gốc).
-- [ ] BUG-007/008: Cân nhắc cộng spread/commission vào sizing và dùng volume thật cho margin check.
+### Phase 1: Cấp bách (P0) — Sửa lỗi "không vào lệnh" của `TM_SessionBreakout` (theo OPT Phần A)
+- [ ] **A1 (P0) - GMT Offset tự động, bỏ giờ server cứng**:
+  - Thêm `input int BrokerGMTOffset = 999; // 999 = auto detect`.
+  - Công thức auto: `off = (int)MathRound((double)(TimeTradeServer() - TimeGMT()) / 3600.0);`
+  - Quy đổi mốc phiên: `serverHour = gmtHour + BrokerGMTOffset;`
+  - Kiểm tra phiên hợp lệ trước khi gửi lệnh: `SymbolInfoSessionTrade(_Symbol, dow, idx, from, to)`.
+- [ ] **A2 (P0) - Chấm dứt silent returns (Log MỌI nhánh bỏ lệnh)**:
+  - Thay thế toàn bộ `return false;` im lặng trong `TrySession()` và `OnTick()` bằng log chi tiết:  
+    `g_logger.Log("SB skip: <lý do> | hour=... adx=... spread=... range=... c1=... rangeHigh=... rangeLow=...");`
+  - Áp dụng tại: CopyBuffer fail, hour ngoài window, lọc range size, ADX < min, spread > max, volume <= 0, gating `t1 < rangeTo`.
+- [ ] **A3 (P0) - Fix sizing skip & tính đúng chi phí thực tế**:
+  - Nếu volume < Min_Volume và SL quá xa: kiểm tra cơ chế giảm `SL_Range_Fraction` (0.5) hoặc nới risk có kiểm soát.
+  - Cộng spread + commission vào loss-per-lot (fix BUG-007).
+- [ ] **A4 (P0) - Dynamic Filling Mode**:
+  - Đọc `(int)SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE)` và chọn FOK/IOC/RETURN hợp lệ -> triệt tiêu lỗi retcode 10030 (fix BUG-002).
+- [ ] **A5 (P1) - Warmup & Gating Fix**:
+  - `if(BarsCalculated(h) < period + 2) { g_logger.Log("SB skip: indicator warming up"); return; }`
+  - Sửa gating nến: Giờ đầu của window (`TradeStartHour`) không bị điều kiện `t1 < rangeTo` chặn nhầm.
 
-### Bước 1: Cost-Stress Testing (Kiểm tra chịu tải chi phí)
-- [x] Tạo preset `config/sets/TM_TFS_cost_stress_10000.set` — thực tế đặt `Max_Spread_Points=**350**` (không phải 35), `News_Enable=true`. Commission trong tester = 0 (chưa stress được).
-- [x] Tạo cấu hình Strategy Tester: `TM_TFS_CostStress_10000.ini` đã được lưu vào profile của MT5 Terminal.
-- [ ] Chạy Strategy Tester trên MT5 GUI với profile `TM_TFS_CostStress_10000.ini` (hoặc load preset `TM_TFS_cost_stress_10000.set`).
-- [ ] Xuất manifest backtest cost-stress **hợp lệ** (commission + slippage + news adapter). Report `.13.30` hiện có **KHÔNG hợp lệ** (trùng baseline — BUG-005).
+### Phase 2: Stress-Test Chi phí Thực tế cho `TM_SessionBreakout`
+- [ ] Chạy Strategy Tester Model 4 (Every tick based on real ticks - 98% real ticks Exness) 3 năm (2023 - 2026).
+- [ ] Áp commission thực tế ($3 - $7/lot) + slippage.
+- [ ] Xuất manifest backtest có đầy đủ chi phí, thẩm định lại xem PF có duy trì > 1.3 hay không.
 
-### Bước 2: Cân chỉnh Sizing cho Vốn Thực tế (Realistic Capital Calibration)
-- [x] Xóa bỏ tư duy ép rủi ro 10% trên tài khoản 50 USD.
-- [x] Thiết lập baseline cho vốn nhỏ an toàn: **Vốn 200 - 500 USD**, cấu hình `RiskPercentPerTrade = 1.0% - 1.5%`.
-- [x] Tạo preset `TM_TFS_realistic_500.set` (Vốn 500 USD, risk 1.0%, ATR mult 2.0x, spread **350**, news ON). **Đã test → PF 1.09 (negative).**
-- [x] Tạo preset `TM_TFS_realistic_200.set` (Vốn 200 USD, risk **2.0%**, ATR mult 1.5x, spread **350**, news ON). **Đã test → PF 0.58 (FAIL).**
-- [x] Copy toàn bộ preset vào thư mục Tester Profiles của MT5 Terminal.
+### Phase 3: Forward Test Demo Tuần tới (Checklist Phần D của OPT)
+- [ ] **OnInit**: In log offset phát hiện được, giờ window (server), symbol specs, filling mode.
+- [ ] **Journal**: Xác nhận dòng `"SB skip: ..."` xuất hiện đều đặn mỗi giờ -> Biết chính xác lý do bot chưa vào lệnh.
+- [ ] Đối chiếu giờ broker vs GMT thật, điều chỉnh `BrokerGMTOffset` nếu cần.
+- [ ] Chạy 1 tuần demo, đối chiếu số lệnh kỳ vọng (~1 lệnh/ngày khi có breakout).
 
-### Bước 3: Hoàn thiện Logic — v2.0 (STRATEGY CHANGE)
-- [x] **Bỏ Breakout**: xóa `EvaluateBreakout`, `Entry_Mode`, `BreakoutK`, `ATR_Channel_Period`, enum `ENUM_ENTRY_MODE`, `SETUP_BREAKOUT`. Entry chỉ còn Pullback.
-- [x] **Bật Take Profit**: `Use_TP=true`, thêm `TP_ATR_Mult=1.5`; truyền TP khi mở lệnh; bỏ chặn `INIT_FAILED`.
-- [x] **Thêm circuit breaker**: `Max_Equity_DD_Percent=10.0` + `CloseAllPositions`.
-- [x] **Sửa breakeven 2 nhánh** (BUG-010).
-- [x] Đồng bộ 8 preset `config/sets/`.
-- [ ] (cũ) Biên dịch EA bằng MetaEditor `0 errors, 0 warnings` — **CHƯA chạy lại sau v2.0** (xem Bước 0).
-- [ ] ~~Đồng bộ binary `TM_TrendFollowerScalper.ex5`~~ — **CHƯA hợp lệ**: EX5 cũ hơn `RiskGuard.mqh` (BUG-006). Cần biên dịch lại + cập nhật hash + compile log.
-
-### Bước 4: Forward Test Demo (2 - 4 tuần)
-- [ ] Cài đặt EA lên VPS hoặc máy chạy demo MT5 liên tục 24/5.
-- [ ] Chọn tài khoản demo Exness Standard hoặc Pro/Raw Spread với vốn 200 - 500 USD.
-- [ ] Ghi nhận log giao dịch hàng tuần, lưu báo cáo vào `reports/forward/`.
-- [ ] Đối chiếu tỷ lệ trượt giá thực tế và spread dãn ban đêm so với giả định backtest.
-
-### Bước 5: Thẩm định An toàn Cuối cùng (Pre-Live Checklist)
+### Phase 4: Thiết kế & Xây dựng `TM_GoldSweepScalper` (Dài hạn theo SPEC_GOLD_SCALPER.md)
+- [ ] Xây dựng 9 module chuẩn hóa trong `MQL5/Include/TM_EA/`:
+  1. `CSymbolSpecs`: Chuẩn hóa point/tick, volume step, tự dò suffix.
+  2. `CTimeService`: Tự động dò GMT offset, tích hợp `SymbolInfoSessionTrade`.
+  3. `CRegimeEngine`: TREND / RANGE / BREAKOUT có hysteresis.
+  4. `CLiquidityMap`: Swing, Equal Highs/Lows, Asian range, PDH/PDL.
+  5. `CStrategyHub`: Ưu tiên SweepReversal -> ORB -> TrendPullback.
+  6. `CRiskManager`: Risk %/lệnh, OrderCalcProfit, cộng spread + commission.
+  7. `CTrailingEngine`: Breakeven ATR + ATR trail + partial.
+  8. `CGuards`: Spread, news, session, daily loss, equity breaker, cooldown.
+  9. `CLogger`: Log mọi lý do chặn + retcode.
+- [ ] Tích hợp Setup A (SweepReversal) và Setup B (Opening-Range Breakout).
+- [ ] Kiểm định walk-forward và stress-test chi phí trước khi forward demo.
 - [ ] Chạy checklist validation đầy đủ (Mục 6.4).
 - [ ] Xác nhận cơ chế emergency close khi broker từ chối SL hoặc mất kết nối.
 - [ ] Quyết định có cấp vốn thật hay giữ lại tiếp tục R&D.

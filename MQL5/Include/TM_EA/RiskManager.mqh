@@ -9,15 +9,16 @@ class CRiskManager
 {
 public:
    static double CalculateVolume(const string symbol,
-                                const int direction,
-                                const double riskPercent,
-                                const double balance,
-                                const double entryPrice,
-                                const double stopLossPrice,
-                                const double volumeMin,
-                                const double volumeMax,
-                                const double volumeStep,
-                                string &reason)
+                                 const int direction,
+                                 const double riskPercent,
+                                 const double balance,
+                                 const double entryPrice,
+                                 const double stopLossPrice,
+                                 const double volumeMin,
+                                 const double volumeMax,
+                                 const double volumeStep,
+                                 string &reason,
+                                 const double commissionPerLot = 0.0)
    {
       reason = "unknown";
 
@@ -43,7 +44,7 @@ public:
          reason = "OrderCalcProfit failed";
          return 0.0;
       }
-      lossForOneLot = MathAbs(lossForOneLot);
+      lossForOneLot = MathAbs(lossForOneLot) + MathMax(0.0, commissionPerLot);
 
       if(lossForOneLot <= 0.0)
       {
@@ -55,7 +56,7 @@ public:
       double minimumLotLoss = 0.0;
       if(OrderCalcProfit(orderType, symbol, volumeMin, entryPrice, stopLossPrice, minimumLotLoss))
       {
-         minimumLotLoss = MathAbs(minimumLotLoss);
+         minimumLotLoss = MathAbs(minimumLotLoss) + MathMax(0.0, commissionPerLot * volumeMin);
          if(minimumLotLoss > riskMoney)
          {
             reason = "minimum lot exceeds risk cap";

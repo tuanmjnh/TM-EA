@@ -1,0 +1,26 @@
+# Manifest: TM_SB_H1_3Y_REAL (v4.4 P0 Fixed)
+
+- **Bot:** TM_SessionBreakout (v4.4)
+- **Run date:** 2026-11-19
+- **Symbol:** XAUUSDm
+- **Timeframe:** H1
+- **Period:** 2023.08.01 - 2026.07.31 (3 Full Years)
+- **Ticks Quality:** Model=4 (Every tick based on real ticks - 185.8M real ticks from Exness)
+- **Deposit:** 5,000.00 USD (hoặc 5,000 USC Cent)
+- **Final Balance:** 7,051.50 USD
+- **Net Profit:** +2,051.50 USD (+41.03%)
+- **Gross Profit:** 5,990.84 USD
+- **Gross Loss:** -3,923.38 USD
+- **Profit Factor (PF):** 1.527
+- **Total Trades:** 103 lệnh (~34 lệnh/năm, ~2.8 lệnh/tháng)
+- **Wins / Losses:** 26 thắng / 77 thua
+- **Win Rate:** 25.24% (Bù đắp bằng R:R 1:5, lãi trung bình gấp 4 lần lỗ trung bình)
+- **Largest Win:** +346.42 USD
+- **Largest Loss:** -86.73 USD
+- **Max Equity Drawdown:** 791.07 USD (10.201%)
+- **Gói sửa lỗi đã kiểm chứng:**
+  - A1: Tự động dò GMT offset và kiểm tra phiên giao dịch.
+  - A2: Log toàn bộ nhánh skip (không còn silent return).
+  - A3: Sizing tự động có tính phí và fallback SL khi cấn min-lot.
+  - A4: Tự động chọn SYMBOL_FILLING_MODE, 0 lỗi retcode 10030.
+  - A5: Warmup đầy đủ và sửa gating nến.

@@ -14,24 +14,42 @@ private:
    int     m_magicNumber;
    int     m_deviationPoints;
 
+   ENUM_ORDER_TYPE_FILLING m_filling;
+
 public:
    CTradeExecutor()
    {
       m_magicNumber = 0;
       m_deviationPoints = 10;
+      m_filling = ORDER_FILLING_FOK;
    }
 
-   bool Init(const int magicNumber, const int deviationPoints)
+   ENUM_ORDER_TYPE_FILLING AutoSelectFilling(const string symbol)
+   {
+      if(symbol == "")
+         return ORDER_FILLING_FOK;
+      uint f = (uint)SymbolInfoInteger(symbol, SYMBOL_FILLING_MODE);
+      if((f & SYMBOL_FILLING_FOK) != 0)
+         return ORDER_FILLING_FOK;
+      if((f & SYMBOL_FILLING_IOC) != 0)
+         return ORDER_FILLING_IOC;
+      return ORDER_FILLING_RETURN;
+   }
+
+   bool Init(const int magicNumber, const int deviationPoints, const string symbol = "")
    {
       m_magicNumber = magicNumber;
       m_deviationPoints = deviationPoints;
 
       m_trade.SetExpertMagicNumber(magicNumber);
       m_trade.SetDeviationInPoints(deviationPoints);
-      m_trade.SetTypeFilling(ORDER_FILLING_FOK);
+      m_filling = AutoSelectFilling(symbol);
+      m_trade.SetTypeFilling(m_filling);
       m_trade.LogLevel(LOG_LEVEL_ERRORS);
       return true;
    }
+
+   ENUM_ORDER_TYPE_FILLING GetSelectedFilling() const { return m_filling; }
 
    int CountOpenPositions(const string symbol) const
    {

@@ -21,7 +21,9 @@ param(
   [double]$MaxRangeAtr=100.0,
   [int]$EntryTf=16385,
   [bool]$Multi=$false,
-  [bool]$Session2=$true
+  [bool]$Session2=$true,
+  [double]$Commission=0.0,
+  [int]$Offset=0
 )
 
 $exe='C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe'
@@ -58,6 +60,8 @@ ShutdownTerminal=1
 Enabled=true||false||0||true||N
 MagicNumber=555001||555001||1||5550010||N
 TradeComment=$Comment
+BrokerGMTOffset=$Offset||$Offset||1||12||N
+CommissionPerLot=$Commission||$Commission||0.5||10.0||N
 RangeStartHour=$RangeStart||0||1||23||N
 RangeEndHour=$RangeEnd||7||1||23||N
 TradeStartHour=$TradeStart||7||1||23||N

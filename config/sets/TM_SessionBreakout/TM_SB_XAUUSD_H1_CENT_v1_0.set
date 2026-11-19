@@ -1,4 +1,4 @@
-; TM-EA / TM_SessionBreakout - H1 BASELINE for CENT (USC) account, small capital
+; TM-EA / TM_SessionBreakout - H1 BASELINE for CENT (USC) account, small capital v4.4
 ; Same logic as H1 BASELINE. Use on a CENT account so 0.01 lot of gold fits risk ~1%.
 ; Example: 50 USD = 5,000 USC deposit; risk 1% = 50 USC per trade.
 ; RESEARCH CANDIDATE - not confirmed for live. Forward-demo first.
@@ -8,7 +8,8 @@ MagicNumber=555101
 TradeComment=TM_SB_CENT
 Entry_TF=16385
 
-;--- Session 1 range / window (server hours)
+;--- Session 1 range / window (GMT hours) + Auto GMT offset
+BrokerGMTOffset=999
 RangeStartHour=0
 RangeEndHour=7
 TradeStartHour=7
@@ -16,6 +17,10 @@ TradeEndHour=20
 
 ;--- Session 2 disabled
 Use_Session2=false
+Range2StartHour=7
+Range2EndHour=12
+Trade2StartHour=12
+Trade2EndHour=20
 
 ;--- Entry / exit
 Use_ADX_Filter=true
@@ -29,6 +34,7 @@ OneTradePerDay=true
 
 ;--- Risk / execution
 RiskPercentPerTrade=1.0
+CommissionPerLot=0.0
 Min_Volume=0.01
 Max_Volume=0.50
 Max_Spread_Points=350
