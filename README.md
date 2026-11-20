@@ -1,39 +1,84 @@
-# TM-EA
+# TM-EA (Quantitative Scalping & Multi-Agent AI Trade Orchestrator)
 
-**Project:** TM-EA  
-**EA:** TM_TrendFollowerScalper  
-**Initial strategy:** `TM_TFS_V1`  
-**Platform:** MetaTrader 5 / MQL5
+**Dự án:** TM-EA  
+**Chiến lược P0:** `TM_SessionBreakout` (H1 Asian Range Breakout)  
+**Chiến lược P1:** `TM_GoldSweepScalper` (M5 London KZ Judas Liquidity Sweep - 9 module chuẩn hóa, 1Y real-tick profitable baseline PF 1.069, DD 7.39%)  
+**Module AI:** `ai_trade` (Multi-Agent Committee 5 tác tử, Hard RiskGate 6 lớp, FastMCP MT5 Server)  
+**Nền tảng:** MetaTrader 5 (Exness) / MQL5 / Python 3.11+  
+**Cẩm nang sử dụng từ A - Z:** [docs/USER_GUIDE.md](file:///d:/Applications/TM-EA/docs/USER_GUIDE.md)  
+**Tài liệu điều hành tối cao:** [docs/MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md) (v5.0)  
 
-Trend-following micro-scalper for small accounts: pullback entries (**v2.0: Breakout removed**), mandatory initial Stop Loss, adaptive trailing exits with **Take Profit (v2.0)**, and an equity-drawdown circuit breaker.
+---
 
-## Project layout
+## 1. Cấu trúc Dự án (Project Layout)
 
 ```text
 TM-EA/
 ├── README.md
-├── docs/
-│   ├── README.md                # Central documentation map & sitemap
-│   ├── MASTER.md                # Operating manual & AI orchestration hub (P0)
-│   ├── CHANGELOG.md             # Version history and detailed engineering log
-│   ├── ARCHITECTURE.md          # Technical implementation brief & safety invariants
-│   ├── USER_GUIDE.md            # Comprehensive user manual & beginner's guide
-│   ├── specs/                   # Strategy & module specifications (GoldSweep, AI Trade, V1)
-│   ├── plans/                   # Action plans & roadmaps (SB Rescue, AI Upgrade, Forward Demo)
-│   ├── audits/                  # Audits & technical research (OPT Fix, Consistency, Audits)
-│   ├── research/                # Experimental EA studies (Kim La, Wonderwhales, etc.)
-│   └── archive/v1/              # Superseded legacy documents, read-only history
-├── MQL5/
-│   ├── Experts/                 # EA main files: TM_TrendFollowerScalper, TM_SessionBreakout (.mq5/.ex5)
-│   └── Include/TM_EA/           # Modular EA components (.mqh)
+├── ai_trade/                    # Module Trí tuệ Nhân tạo & Giao tiếp MT5 (Python)
+│   ├── bridge/
+│   │   └── mt5_mcp_server.py    # MetaTrader 5 FastMCP Server (11 tools chuẩn)
+│   ├── committee/               # Hội đồng 5 tác tử (Specialists, Debaters, Chair, Orchestrator)
+│   ├── core/
+│   │   ├── models.py            # Data contracts Pydantic
+│   │   ├── provider_router.py   # Hot-swap router (TokenHarbor, Gemini, OpenAI, Ollama...)
+│   │   ├── risk_gate.py         # Chốt chặn an toàn cứng (Hard RiskGate)
+│   │   └── safety.py            # Module an toàn & Physical Kill-Switch
+│   ├── signals/
+│   │   └── detector.py          # Bộ quét tín hiệu MT5 real-time (M5 Sweep / H1 Breakout)
+│   ├── storage/
+│   │   └── db.py                # Quản lý cơ sở dữ liệu SQLite data/results.db
+│   └── runner.py                # File thực thi trung tâm (Paper & Live Trade Runner)
 ├── config/
-│   ├── sets/                    # Versioned MT5 presets (.set), per EA: sets/<EA>/
-│   └── ini/                     # MT5 Strategy Tester configs (.ini), per EA: ini/<EA>/
+│   ├── ai/                      # Cấu hình AI: agents.json, providers.json, methods_registry.json
+│   ├── sets/                    # Presets thông số chuẩn (.set) cho từng EA và mức vốn
+│   └── test/                    # File cấu hình tester (.ini)
+├── data/
+│   └── results.db               # SQLite database lưu trữ lịch sử quyết định của AI
+├── docs/
+│   ├── README.md                # Bản đồ phân loại & hướng dẫn tài liệu tổng quan
+│   ├── MASTER.md                # Tài liệu điều hành tối cao (v5.0 P0)
+│   ├── USER_GUIDE.md            # CẨM NANG HƯỚNG DẪN SỬ DỤNG TỪ A - Z CHO NGƯỜI MỚI
+│   ├── CHANGELOG.md             # Toàn bộ nhật ký cập nhật qua các phiên bản
+│   ├── ARCHITECTURE.md          # Kiến trúc kỹ thuật và invariants rủi ro MQL5
+│   ├── specs/                   # Đặc tả kỹ thuật (SPEC_GOLD_SCALPER, SPEC_AI_TRADE_MODULE...)
+│   ├── plans/                   # Kế hoạch hành động (ACTION_PLAN_AI_TRADE, ACTION_PLAN_2026_11_19...)
+│   ├── audits/                  # Báo cáo kiểm định và phân tích nguyên nhân gốc
+│   ├── research/                # Các thuật toán thử nghiệm (Kim La, Wonderwhales...)
+│   └── archive/v1/              # Kho lưu trữ mã nguồn và tài liệu thế hệ cũ
+├── MQL5/
+│   ├── Experts/                 # Mã nguồn EA MQL5: TM_GoldSweepScalper, TM_SessionBreakout (.mq5/.ex5)
+│   └── Include/TM_EA/           # Module tái sử dụng: TimeService, RegimeEngine, RiskManager...
 ├── reports/
-│   ├── backtests/               # MT5 Strategy Tester reports and HTML exports
-│   └── forward/                 # Demo forward-test reports
-├── tests/                       # Test plans, logs, checklists and validation notes
-└── logs/                        # EA diagnostic logs (do not commit sensitive data)
+│   ├── backtests/               # Báo cáo kết quả backtest tick thật chi tiết
+│   └── forward/                 # Nhật ký chạy thử nghiệm Demo thực tế
+└── tests/                       # Test suite tự động (Pytest 6/6 tests passed 100%)
+```
+
+---
+
+## 2. Hướng dẫn Vận hành Nhanh (Quick Start)
+
+Xem hướng dẫn chi tiết từng bước tại **[docs/USER_GUIDE.md](file:///d:/Applications/TM-EA/docs/USER_GUIDE.md)**.
+
+### A. Chạy AI Trade Runner ở Chế độ Paper (Không vào lệnh thật)
+```powershell
+# Chạy kiểm nghiệm 1 lần:
+python -m ai_trade.runner --once --mode paper
+
+# Chạy vòng lặp tự động liên tục mỗi 30s:
+python -m ai_trade.runner --interval 30 --mode paper
+```
+
+### B. Chạy Tự động trên Tài khoản Exness Demo (Vào lệnh 0.01 lot)
+```powershell
+python -m ai_trade.runner --interval 30 --mode live --lot 0.01
+```
+
+### C. Ngắt Khẩn cấp & Đóng Sạch Lệnh (Physical Kill-Switch)
+```powershell
+python -m ai_trade.runner --kill
+# Hoặc tạo file cờ trống: config/ai/KILL
 ```
 
 ## Document precedence

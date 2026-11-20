@@ -1,0 +1,30 @@
+{
+  "methods": [
+    {
+      "id": "METHOD_001_ASIAN_BREAKOUT",
+      "name": "TM_SessionBreakout",
+      "symbol": "XAUUSDm",
+      "timeframe": "H1",
+      "type": "RULE_BASED_EA",
+      "enabled": true,
+      "weight": 1.0,
+      "min_confidence": 0.65,
+      "risk_multiplier": 1.0,
+      "regime_preference": ["TREND_BULL", "TREND_BEAR", "BREAKOUT"],
+      "spec_path": "docs/specs/SOURCE_SPEC_V1.md"
+    },
+    {
+      "id": "METHOD_002_JUDAS_SWEEP",
+      "name": "TM_GoldSweepScalper",
+      "symbol": "XAUUSDm",
+      "timeframe": "M5",
+      "type": "HYBRID_AI_SUPERVISED",
+      "enabled": true,
+      "weight": 1.0,
+      "min_confidence": 0.70,
+      "risk_multiplier": 1.0,
+      "regime_preference": ["RANGE", "TREND_BULL", "TREND_BEAR"],
+      "spec_path": "docs/specs/SPEC_GOLD_SCALPER.md"
+    }
+  ]
+}

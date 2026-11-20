@@ -6,8 +6,8 @@
 **EA tạm gác (Archived/On Hold):** TM_TrendFollowerScalper v2.0 (thua 6/6, hardcode server hour)  
 **Platform:** MetaTrader 5 / MQL5  
 **Symbol / TF:** XAUUSD (XAUUSDm) / H1 (SB) & M5  
-**Last updated:** 2026-11-19 (v4.7 - AI Trade Orchestrator Spec & Roadmap)  
-**Status:** **v4.7** — **Chuẩn hóa Kiến trúc AI Trade Orchestrator**: Hoàn thiện đặc tả 5 tầng trong [SPEC_AI_TRADE_MODULE.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_AI_TRADE_MODULE.md) và Kế hoạch nâng cấp 4 giai đoạn tại [ACTION_PLAN_AI_TRADE.md](file:///d:/Applications/TM-EA/docs/plans/ACTION_PLAN_AI_TRADE.md). Duy trì song song **TM_SessionBreakout** (P0 đã cứu A1-A5, PF 1.527) và **TM_GoldSweepScalper** (v1.2 tối ưu London KZ 1Y dương PF 1.069, DD 7.39%). Mọi quyết định AI phải qua Hard RiskGate, không bao giờ override tầng an toàn. Toàn bộ tài liệu được sắp xếp khoa học tại [docs/README.md](file:///d:/Applications/TM-EA/docs/README.md).
+**Last updated:** 2026-11-20 (v5.1 - Phase 3 Self-Evolution Engine & WFA Complete)  
+**Status:** **v5.1** — **Kích hoạt Vòng lặp Tự tiến hóa (Self-Evolution Engine)**: Hoàn thiện toàn diện 3 giai đoạn của AI Trade Orchestrator: Multi-Agent Committee -> Hard RiskGate -> Live Runner -> Self-Evolution Loop (`ai_trade/evolution/`). Tích hợp tự động hóa Strategy Tester, kiểm định Walk-Forward OOS (4 cửa sổ x 2), Monte Carlo (100 runs) và cây phả hệ tham số (`config/ai/lineage_tree.json`) với cơ chế Auto-Rollback khi regression > 10%. Toàn bộ 11/11 unit tests passed 100%. Sẵn sàng vận hành Forward Demo. Mọi tài liệu và báo cáo được đồng bộ tại [docs/README.md](file:///d:/Applications/TM-EA/docs/README.md).
 
 > ⚠️ Tài liệu này KHÔNG cam kết lợi nhuận. Mọi số backtest phải đọc kèm mục CAVEATS.  
 > Thứ tự ưu tiên tài liệu: `SOURCE_SPEC_V1.md` > `ARCHITECTURE.md` (mục 2 Safety rules thắng khi xung đột) > `archive/`.  

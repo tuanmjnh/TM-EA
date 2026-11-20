@@ -1,0 +1,53 @@
+{
+  "agent_roles": {
+    "technical_specialist": {
+      "provider": "tokenharbor",
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.2,
+      "max_tokens": 800,
+      "description": "Phân tích cấu trúc nến, S/R, Liquidity Sweep, Range và Regime"
+    },
+    "news_sentiment_specialist": {
+      "provider": "tokenharbor",
+      "model": "gemini-3.8-flash",
+      "temperature": 0.2,
+      "max_tokens": 600,
+      "description": "Đánh giá tin tức kinh tế vĩ mô, USD index và tâm lý rủi ro"
+    },
+    "risk_volatility_specialist": {
+      "provider": "tokenharbor",
+      "model": "deepseek-v4.1-flash",
+      "temperature": 0.1,
+      "max_tokens": 600,
+      "description": "Đánh giá biến động ATR, spread, khoảng cách Stop Loss và Kill-Zone"
+    },
+    "bull_advocate": {
+      "provider": "tokenharbor",
+      "model": "gemini-3.8-flash",
+      "temperature": 0.4,
+      "max_tokens": 700,
+      "description": "Phe Bò: Xây dựng luận điểm Mua mạnh nhất dựa trên Evidence Package"
+    },
+    "bear_advocate": {
+      "provider": "tokenharbor",
+      "model": "gemini-3.8-flash",
+      "temperature": 0.4,
+      "max_tokens": 700,
+      "description": "Phe Gấu: Xây dựng luận điểm Bán mạnh nhất dựa trên Evidence Package"
+    },
+    "committee_chair": {
+      "provider": "tokenharbor",
+      "model": "claude-sonnet-4.6",
+      "temperature": 0.2,
+      "max_tokens": 1000,
+      "description": "Chủ tịch Hội đồng / PM: Phân xử phản biện và ra quyết định 5 bậc"
+    },
+    "hard_validator": {
+      "provider": "rule_based_engine",
+      "model": "local",
+      "temperature": 0.0,
+      "max_tokens": 0,
+      "description": "Kiểm duyệt an toàn cứng bất biến trước khi gửi lệnh"
+    }
+  }
+}

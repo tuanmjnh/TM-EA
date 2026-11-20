@@ -35,20 +35,24 @@ input int      Range2EndHour         = 12;     // Session 2 range end (GMT hour)
 input int      Trade2StartHour       = 12;     // Session 2 entry start (GMT hour)
 input int      Trade2EndHour         = 20;     // Session 2 entry end (GMT hour)
 
-//--- Strategy Parameters
+// [FROZEN SAFETY CODE - STRICTLY READ-ONLY FOR AI]
 input double   RiskPercentPerTrade   = 1.0;    // Risk % of balance per trade
 input double   CommissionPerLot      = 0.0;    // Commission per lot in account currency (0 = broker default)
-input double   RR                    = 5.0;    // Take profit = RR * risk (plateau 4-6)
-input double   SL_Range_Fraction     = 1.0;    // SL distance = this * range size (1.0 = opposite side)
 input double   Min_Volume            = 0.01;
 input double   Max_Volume            = 0.50;
 input int      Max_Spread_Points     = 350;
 input bool     OneTradePerDay        = true;
+// [END FROZEN SAFETY CODE]
+
+// >>> AI_MUTATION_ZONE_START: BREAKOUT_TARGETS <<<
+input double   RR                    = 5.0;    // Take profit = RR * risk (plateau 4-6)
+input double   SL_Range_Fraction     = 1.0;    // SL distance = this * range size (1.0 = opposite side)
 input bool     Use_ADX_Filter        = true;   // Require ADX(H1) >= ADX_Min at breakout
 input int      ADX_Period            = 14;
 input double   ADX_Min               = 20.0;
 input double   Min_Range_ATR         = 0.0;    // Range must be >= this * ATR(H1)
 input double   Max_Range_ATR         = 100.0;  // Range must be <= this * ATR(H1)
+// >>> AI_MUTATION_ZONE_END: BREAKOUT_TARGETS <<<
 
 CSymbolSpecs   g_symbol;
 CLogger        g_logger;

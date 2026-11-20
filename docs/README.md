@@ -10,10 +10,10 @@ Các tài liệu điều phối trung tâm được đặt trực tiếp tại t
 
 | Tài liệu | Phiên bản | Mục đích & Phạm vi sử dụng |
 |---|:---:|---|
-| [MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md) | **v4.7 (P0)** | **Tài liệu điều hành tối cao** và cẩm nang vận hành AI. Quy định quy chuẩn coding, invariants rủi ro, thông số canonical và trạng thái các EA. |
-| [CHANGELOG.md](file:///d:/Applications/TM-EA/docs/CHANGELOG.md) | **v4.7** | Toàn bộ nhật ký cập nhật, mã lỗi, quyết định kiến trúc và kết quả kiểm định theo dòng thời gian. |
+| [MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md) | **v5.0 (P0)** | **Tài liệu điều hành tối cao** và cẩm nang vận hành AI. Quy định quy chuẩn coding, invariants rủi ro, thông số canonical và trạng thái các EA. |
+| [CHANGELOG.md](file:///d:/Applications/TM-EA/docs/CHANGELOG.md) | **v5.0** | Toàn bộ nhật ký cập nhật, mã lỗi, quyết định kiến trúc và kết quả kiểm định theo dòng thời gian. |
 | [ARCHITECTURE.md](file:///d:/Applications/TM-EA/docs/ARCHITECTURE.md) | **v4.3** | Kiến trúc kỹ thuật của hệ thống EA, quy chuẩn module MQL5 và các rào chắn bảo vệ vốn (`CGuards`, `CRiskManager`). |
-| [USER_GUIDE.md](file:///d:/Applications/TM-EA/docs/USER_GUIDE.md) | **v2.0** | Cẩm nang hướng dẫn sử dụng MT5 Strategy Tester, cài đặt tài khoản Exness Cent/Standard và thao tác từ A-Z. |
+| [USER_GUIDE.md](file:///d:/Applications/TM-EA/docs/USER_GUIDE.md) | **v5.0** | Cẩm nang hướng dẫn sử dụng toàn diện từ A-Z: Backtest MT5, FastMCP Server, AI Trade Orchestrator, Kill-Switch và kết nối Exness. |
 
 ---
 

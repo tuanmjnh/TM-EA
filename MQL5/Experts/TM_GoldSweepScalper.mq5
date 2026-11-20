@@ -37,6 +37,7 @@ input bool              Enable_LondonKZ         = true;      // Trade London Kil
 input bool              Enable_NYKZ             = true;      // Trade New York Kill-Zone (12:30 - 15:00 GMT)
 input bool              OneTradePerKillZone     = true;      // Max 1 trade per kill-zone (Rare-fire gating)
 
+// >>> AI_MUTATION_ZONE_START: STRATEGY_SETUPS <<<
 input group "=== STRATEGY SETUPS ==="
 input bool              Enable_SweepReversal    = true;      // Setup A: Liquidity Sweep Reversal
 input bool              Sweep_OnlyMajor         = false;     // Only sweep Asia High/Low and PDH/PDL (Exclude minor swings)
@@ -45,7 +46,9 @@ input bool              Enable_ORB              = true;      // Setup B: Opening
 input double            ORB_RR                  = 4.0;       // ORB R:R Target (3.0 - 5.0)
 input double            Min_Range_ATR           = 0.5;       // Range must be >= this * ATR(M5)
 input double            Max_Range_ATR           = 8.0;       // Range must be <= this * ATR(M5)
+// >>> AI_MUTATION_ZONE_END: STRATEGY_SETUPS <<<
 
+// [FROZEN SAFETY CODE - STRICTLY READ-ONLY FOR AI - NEVER MUTATE]
 input group "=== RISK & POSITION SIZING ==="
 input double            RiskPercentPerTrade     = 0.5;       // Risk % per trade (0.25 - 1.0%)
 input double            CommissionPerLot        = 0.0;       // Broker commission in $/lot
@@ -58,13 +61,16 @@ input double            Max_Daily_Loss_Pct      = 2.0;       // Stop trading for
 input double            Circuit_Breaker_DD_Pct  = 8.0;       // Hard stop & close all if total DD exceeds this
 input int               Max_Consec_Losses       = 3;         // Consecutive losses to trigger cooldown
 input int               Cooldown_Seconds        = 1800;      // Cooldown period in seconds (30 mins)
+// [END FROZEN SAFETY CODE]
 
+// >>> AI_MUTATION_ZONE_START: TRAILING_EXITS <<<
 input group "=== TRAILING & BREAKEVEN ==="
 input bool              Enable_Trailing         = true;      // Dynamic ATR trailing stop & breakeven
 input double            Trailing_ATR_Mult       = 2.0;       // ATR multiplier for trailing distance
 input double            Breakeven_ATR_Mult      = 1.0;       // Gate breakeven by at least 1.0 * ATR (fix BUG-013)
 input double            Breakeven_After_Pips    = 30.0;      // Move SL to BE after this profit (pips)
 input double            Trail_Step_Pips         = 10.0;      // Trailing modification step (pips)
+// >>> AI_MUTATION_ZONE_END: TRAILING_EXITS <<<
 
 //--- Module Instances
 CSymbolSpecs    g_symbol;

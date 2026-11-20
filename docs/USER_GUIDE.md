@@ -1,233 +1,365 @@
-# HƯỚNG DẪN SỬ DỤNG TM-EA TỪ A - Z CHO NGƯỜI MỚI
+# CẨM NANG HƯỚNG DẪN SỬ DỤNG TM-EA & AI TRADE TỪ A - Z
 
-**Dự án:** TM-EA  
-**EA:** `TM_TrendFollowerScalper`  
-**Chiến lược:** `TM_TFS_V1` (Trend Follower Scalper)  
-**Cặp giao dịch:** Vàng - XAUUSD (hoặc XAUUSDm trên Exness)  
-**Khung thời gian:** M5 (Vào lệnh) & M15 (Bộ lọc xu hướng)  
-**Cập nhật lần cuối:** 2026-11-12  
-
-Tài liệu này dành cho người mới bắt đầu, hướng dẫn chi tiết từng bước từ cài đặt, cấu hình, chạy backtest, xuất báo cáo cho đến cách vận hành EA an toàn trên tài khoản demo.
+**Dự án:** TM-EA (Quantitative Scalping & Multi-Agent AI Trade Orchestrator)  
+**Phiên bản tài liệu:** v5.0 | **Cập nhật:** 2026-11-20  
+**Đối tượng:** Người mới bắt đầu, Trader định lượng và Nhà phát triển hệ thống  
+**Tài liệu điều hành tối cao:** [docs/MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md)  
+**Đặc tả hệ thống:** [SPEC_GOLD_SCALPER.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_GOLD_SCALPER.md) | [SPEC_AI_TRADE_MODULE.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_AI_TRADE_MODULE.md)  
 
 ---
 
 ## MỤC LỤC
-1. [Hiểu nhanh về chiến lược TM-EA](#1-hiểu-nhanh-về-chiến-lược-tm-ea)
-2. [Vị trí các thư mục quan trọng trên máy](#2-vị-trí-các-thư-mục-quan-trọng-trên-máy)
-3. [Hướng dẫn từng bước chạy Backtest trên MT5](#3-hướng-dẫn-từng-bước-chạy-backtest-trên-mt5)
-4. [Hướng dẫn chọn Preset (.set) theo quy mô vốn](#4-hướng-dẫn-chọn-preset-set-theo-quy-mô-vốn)
-5. [Dữ liệu Backtest nằm ở đâu và cách xuất báo cáo](#5-dữ-liệu-backtest-nằm-ở-đâu-và-cách-xuất-báo-cáo)
-6. [Cách đọc và đánh giá các chỉ số báo cáo](#6-cách-đọc-và-đánh-giá-các-chỉ-số-báo-cáo)
-7. [Hướng dẫn cài đặt chạy Forward Test Demo trên biểu đồ](#7-hướng-dẫn-cài-đặt-chạy-forward-test-demo-trên-biểu-đồ)
-8. [Các sự cố thường gặp & Cách khắc phục](#8-các-sự-cố-thường-gặp--cách-khắc-phục)
+1. [Giới thiệu Hệ sinh thái TM-EA v5.0](#1-giới-thiệu-hệ-sinh-thái-tm-ea-v50)
+2. [Cấu trúc Thư mục & Vị trí các File Quan trọng](#2-cấu-trúc-thư-mục--vị-trí-các-file-quan-trọng)
+3. [Hướng dẫn Chạy Backtest Robot MQL5 trên MT5](#3-hướng-dẫn-chạy-backtest-robot-mql5-trên-mt5)
+   - 3.1. Robot `TM_GoldSweepScalper` (M5 London KZ Judas Sweep)
+   - 3.2. Robot `TM_SessionBreakout` (H1 Asian Range Breakout)
+4. [Hướng dẫn Cấu hình & Sử dụng MetaTrader 5 FastMCP Server](#4-hướng-dẫn-cấu-hình--sử-dụng-metatrader-5-fastmcp-server)
+   - 4.1. Cơ chế kết nối tự động MCP với MT5 Terminal
+   - 4.2. Danh mục 11 công cụ (Tools) chuẩn của MT5 MCP
+5. [Hướng dẫn Vận hành Hệ thống AI Trade Orchestrator](#5-hướng-dẫn-vận-hành-hệ-thống-ai-trade-orchestrator)
+   - 5.1. Chế độ Paper Trading (Phân tích ảo & Ghi log không vào lệnh)
+   - 5.2. Chế độ Live Demo Forward (Khớp lệnh tự động vào Exness MT5)
+   - 5.3. Quy trình Hội đồng AI 5 Tác tử & Cơ chế Bầu phiếu
+6. [Cơ chế Ngắt Khẩn cấp — Physical Kill-Switch](#6-cơ-chế-ngắt-khẩn-cấp--physical-kill-switch)
+   - 6.1. Kích hoạt khẩn cấp qua dòng lệnh CLI
+   - 6.2. Kích hoạt thủ công qua File cờ `config/ai/KILL`
+   - 6.3. Quy trình tự động đóng sạch lệnh bảo vệ vốn
+7. [Tra cứu Dữ liệu & Đánh giá Hiệu suất (SQLite results.db)](#7-tra-cứu-dữ-liệu--đánh-giá-hiệu-suất-sqlite-resultsdb)
+8. [Xử lý Sự cố Thường gặp (Troubleshooting)](#8-xử-lý-sự-cố-thường-gặp-troubleshooting)
+9. [Checklist Hàng ngày cho Trader (Daily Routine)](#9-checklist-hàng-ngày-cho-trader-daily-routine)
 
 ---
 
-## 1. HIỂU NHANH VỀ CHIẾN LƯỢC TM-EA
+## 1. GIỚI THIỆU HỆ SINH THÁI TM-EA v5.0
 
-`TM_TrendFollowerScalper` là robot giao dịch thuật toán theo trường phái **Micro-Scalping bám theo xu hướng**:
-- **Nguyên lý cốt lõi:**
-  1. **Lọc xu hướng lớn (M15)**: Chỉ mua khi có Uptrend rõ ràng (Fast EMA > Slow EMA và ADX > 25), chỉ bán khi có Downtrend. Nếu thị trường đi ngang (Sideway) thì EA **đứng ngoài 100%**.
-  2. **Tìm điểm vào lệnh nhỏ (M5)** `[v2.0]`: Vào lệnh theo **Pullback** — giá hồi về đường EMA 20 rồi nến đóng xác nhận quay lại xu hướng. (v2.0 đã bỏ cơ chế **Breakout**.)
-  3. **Có Take Profit + Trailing Stop** `[v2.0]`: EA đặt **TP cố định theo ATR** (`TP_ATR_Mult`) **kết hợp** Trailing Stop động theo ATR. (Trước v2.0 không đặt TP.) Ngoài ra có **circuit breaker**: nếu DD equity chạm `Max_Equity_DD_Percent` (mặc định 10%), EA đóng toàn bộ lệnh và khóa giao dịch trong ngày.
-  4. **Kỷ luật vốn tuyệt đối**: Bắt buộc có SL ban đầu cho mọi lệnh, tự động tính volume theo % rủi ro cố định, không bao giờ gồng lỗ, **tuyệt đối không Martingale / không gấp thếp**.
-
----
-
-## 2. VỊ TRÍ CÁC THƯ MỤC QUAN TRỌNG TRÊN MÁY
-
-Để thuận tiện quản lý, dự án chia làm 2 khu vực lưu trữ:
-
-### 2.1. Thư mục Mã nguồn Dự án (Workspace)
-Đường dẫn: `D:\Applications\TM-EA\`
-- `docs/`: Chứa tài liệu hướng dẫn (`MASTER.md`, `USER_GUIDE.md`, `ARCHITECTURE.md`...).
-- `MQL5/Experts/`: Chứa file mã nguồn chính `TM_TrendFollowerScalper.mq5` và file đã biên dịch `TM_TrendFollowerScalper.ex5`.
-- `config/sets/`: Chứa toàn bộ các file preset cấu hình mẫu (`.set`) tương ứng với từng mức vốn.
-- `reports/backtests/`: Nơi lưu trữ các báo cáo kết quả backtest, được phân cấp theo từng bot và từng cấu hình preset (`TM_TrendFollowerScalper/<PresetName>/`).
-- `reports/forward/`: Nơi lưu nhật ký và kết quả chạy thử nghiệm demo trực tiếp.
-
-### 2.2. Thư mục Dữ liệu MT5 Terminal (AppData)
-Đường dẫn: `C:\Users\tuanmjnh\AppData\Roaming\MetaQuotes\Terminal\53785E099C927DB68A545C249CDBCE06\`
-*(Bạn có thể mở nhanh bằng cách trong MT5 chọn menu: **File -> Open Data Folder**)*
-- `MQL5\Experts\`: Nơi MT5 nhìn thấy robot để cho phép kéo vào biểu đồ hoặc chạy tester.
-- `MQL5\Profiles\Tester\`: Nơi lưu các file preset `.set` và cấu hình `.ini` để nạp nhanh vào Strategy Tester.
-- `Tester\logs\`: Chứa file nhật ký tổng của trình kiểm thử MT5.
-
-### 2.3. Thư mục Nhật ký Tester Agent (Chi tiết từng lệnh)
-Đường dẫn: `C:\Users\tuanmjnh\AppData\Roaming\MetaQuotes\Tester\53785E099C927DB68A545C249CDBCE06\Agent-127.0.0.1-3000\logs\`
-- Chứa toàn bộ log in ra từ robot trong lúc chạy backtest (lý do vào lệnh, lý do skip, thông báo dời trailing SL...).
-
----
-
-## 3. HƯỚNG DẪN TỪNG BƯỚC CHẠY BACKTEST TRÊN MT5
-
-### Bước 1: Mở trình kiểm thử chiến lược (Strategy Tester)
-1. Mở phần mềm MetaTrader 5.
-2. Nhấn tổ hợp phím **`Ctrl + R`** (hoặc chọn menu **View -> Strategy Tester**).
-3. Nếu hiện giao diện chọn mục, nhấn chọn biểu tượng **Single** (Kiểm thử đơn).
-
-### Bước 2: Thiết lập thông số kiểm thử (Tab Settings)
-Tại thanh cài đặt bên dưới tab **Settings**, bạn chọn các mục như sau:
-
-| Trường thiết lập | Giá trị chọn | Giải thích |
-|---|---|---|
-| **Expert** | `TM_TrendFollowerScalper.ex5` | Chọn đúng tên robot TM-EA |
-| **Symbol** | `XAUUSDm` (hoặc `XAUUSD`) | Cặp giao dịch vàng (trên tài khoản Exness là `XAUUSDm`) |
-| **Period** | `M5` | Khung thời gian scalp vào lệnh |
-| **Date** | `Custom period` (hoặc `Last 3 months`) | Chọn khoảng thời gian test (ví dụ: `2026.08.01` đến `2026.10.31`) |
-| **Forward** | `No` | Không dùng chế độ forward tự động |
-| **Delays** | `Zero latency` hoặc `Random delay` | Độ trễ mạng (chọn Random delay nếu muốn kiểm tra trượt giá) |
-| **Model** | **`Every tick based on real ticks`** | **Bắt buộc chọn mô hình này** để test chính xác từng tick thật của sàn Exness |
-| **Deposit** | Nhập số vốn mong muốn (ví dụ `200`, `500` hoặc `1000`) | Đơn vị tiền tệ chọn `USD` |
-| **Leverage** | `1:100` | Đòn bẩy tài khoản |
-| **Optimization** | `Disabled` | Tắt tối ưu hóa tham số (chỉ chạy kiểm thử 1 lần) |
-| **Visual mode** | Tùy chọn (Bật để xem biểu đồ chạy, tắt để chạy siêu tốc) | |
-
-### Bước 3: Nạp Preset tham số (Tab Inputs)
-1. Chuyển sang tab **Inputs** trên thanh công cụ Strategy Tester.
-2. Nhấp **chuột phải** vào bất kỳ vị trí nào trong bảng tham số -> chọn **Load**.
-3. Chọn file preset phù hợp với số vốn bạn muốn kiểm tra (ví dụ: `TM_TFS_realistic_200.set` hoặc `TM_TFS_realistic_500.set`).
-4. Nhấn **Open**. Toàn bộ các thông số sẽ tự động được điền chuẩn xác.
-
-### Bước 4: Bắt đầu chạy
-- Nhấn nút **Start** màu xanh ở góc phải bên dưới.
-- Quá trình chạy sẽ bắt đầu: MT5 sẽ tự động đồng bộ dữ liệu tick lịch sử từ máy chủ sàn và chạy thuật toán.
-
----
-
-## 4. HƯỚNG DẪN CHỌN PRESET (.SET) THEO QUY MÔ VỐN
-
-Hệ thống cung cấp sẵn các file preset trong thư mục `config/sets/` (đã đồng bộ vào MT5):
+Hệ thống **TM-EA v5.0** là nền tảng giao dịch định lượng Vàng (`XAUUSD` / `XAUUSDm`) kết hợp giữa **Robot MQL5 tần suất chọn lọc (Rare-fire EA)** và **Hội đồng Trí tuệ Nhân tạo Đa tác tử (Multi-Agent AI Committee)**:
 
 ```mermaid
 flowchart TD
-    V["Quy mô vốn của bạn"] --> V50["50 USD (Rất nhỏ)"]
-    V --> V100["100 USD (Nhỏ)"]
-    V --> V200["200 USD (Khởi điểm Vàng)"]
-    V --> V500["500 USD (Khuyến nghị chuẩn)"]
-    V --> V1000["1.000 USD+ (Tiêu chuẩn)"]
-    V --> V5000["5.000 USD+ (Bảo toàn)"]
-
-    V50 --> P50["TM_TFS_small_50.set<br>SL ngắn 1.0x ATR | Risk 5%<br><i>(Khuyên dùng tk Cent)</i>"]
-    V100 --> P100["TM_TFS_small_100.set<br>SL ngắn 1.2x ATR | Risk 3%"]
-    V200 --> P200["TM_TFS_realistic_200.set<br>SL vừa 1.5x ATR | Risk 2%"]
-    V500 --> P500["TM_TFS_realistic_500.set<br>SL chuẩn 2.0x ATR | Risk 1%"]
-    V1000 --> P1000["TM_TFS_standard_1000.set<br>SL chuẩn 2.0x ATR | Risk 0.5%"]
-    V5000 --> P5000["TM_TFS_conservative_5000.set<br>SL rộng 2.5x ATR | Risk 0.25%"]
+    A["Thị trường Vàng XAUUSD<br>(MetaTrader 5 Exness)"] -->|FastMCP Bridge| B["Signal Detector<br>(M5 Sweep / H1 Breakout)"]
+    B -->|Bắn tín hiệu| C["Hội đồng AI (5 Tác tử)<br>Technical - News - Risk - Bull/Bear - Chair"]
+    C -->|Bầu phiếu & Phân xử| D["Chốt chặn An toàn Cứng<br>(Hard RiskGate 6 Lớp)"]
+    D -->|Phê duyệt| E["Thực thi Lệnh<br>(mt5_order_send)"]
+    D -->|Chặn vi phạm| F["Hủy lệnh / Ghi Log"]
+    E --> G[("SQLite Results DB<br>data/results.db")]
+    F --> G
+    H["File cờ khẩn cấp<br>config/ai/KILL"] -.->|Ngắt tức thì| D
 ```
 
-### Chi tiết ý nghĩa các tham số trong Preset:
-- **`RiskPercentPerTrade`**: % số dư tài khoản chấp nhận mất nếu dính SL ban đầu.
-- **`Trail_ATR_Mult`**: Khoảng cách thả trôi Stop Loss theo độ biến động ATR.
-  - Số nhỏ (1.0x - 1.5x): Cắt lỗ ngắn, bảo vệ vốn chặt, phù hợp tài khoản nhỏ.
-  - Số lớn (2.0x - 2.5x): Cho giá không gian rung lắc để ôm trọn các con sóng trend dài.
-- **`Max_Spread_Points = 350`**: Giới hạn spread tối đa cho phép vào lệnh là 35 cents (3.5 pips). Khi thị trường mở cửa ban đêm hoặc có tin bão làm spread dãn vượt 350 points, EA sẽ tự động đứng ngoài không mở lệnh.
-- **`News_Enable = true`**: Tránh giao dịch trước và sau 20 phút khi có tin tức đỏ (High Impact).
-- **`Use_TP = true` + `TP_ATR_Mult = 1.5`** `[v2.0]`: Bật Take Profit theo ATR. `Entry_Mode` đã bị bỏ (v2.0 chỉ còn Pullback).
-- **`Max_Equity_DD_Percent = 10.0`** `[v2.0]`: Circuit breaker — DD equity ≥ 10% thì đóng hết lệnh và khóa giao dịch trong ngày.
-
-> 💡 **LƯU Ý QUAN TRỌNG VỀ TÍNH TƯƠNG THÍCH**:  
-> Toàn bộ các file `.set` trên **được thiết kế để dùng chung 100% cho cả Strategy Tester (Backtest) và Biểu đồ Demo trực tiếp (Live Forward Test)**. Khi mở tài khoản demo với bất kỳ số vốn nào (từ 50$ đến 5000$), bạn chỉ cần kéo EA vào biểu đồ demo và **Load đúng file preset tương ứng** là EA sẽ vận hành tự động theo đúng ngân sách rủi ro đã được tính toán.
-
----
-
-## 5. DỮ LIỆU BACKTEST NẰM Ở ĐÂU VÀ CÁCH XUẤT BÁO CÁO
-
-Sau khi thanh trạng thái chạy xong 100%, kết quả sẽ hiển thị trên thanh tab của Strategy Tester:
-
-### 5.1. Xem kết quả trực tiếp trên MT5
-- Tab **Backtest (Báo cáo)**: Xem tổng quan lợi nhuận, drawdown, số lệnh thắng/thua, profit factor...
-- Tab **Graph (Biểu đồ)**: Xem đường cong tăng trưởng vốn (Equity & Balance curve).
-- Tab **Deals (Giao dịch)**: Danh sách chi tiết từng lệnh mua/bán, giá vào, giá dời SL và giá đóng lệnh.
-- Tab **Journal (Nhật ký)**: Xem thông báo hệ thống và log chẩn đoán của bot.
-
-### 5.2. Cách xuất (Export) báo cáo ra file lưu trữ
-1. Nhấp chuột vào tab **Backtest** (Báo cáo).
-2. Nhấp **chuột phải** vào bất kỳ vị trí nào trên bảng kết quả.
-3. Chọn **Report** -> chọn định dạng **HTML (Chrome, Edge...)**.
-4. Cửa sổ lưu file hiện ra:
-   - Hãy điều hướng lưu vào đúng thư mục của Bot và Preset tương ứng:  
-     `D:\Applications\TM-EA\reports\backtests\TM_TrendFollowerScalper\<Tên_Preset>\`  
-     *(Ví dụ: Với preset 200 USD, lưu vào `reports\backtests\TM_TrendFollowerScalper\TM_TFS_realistic_200\`)*
-   - Đặt tên file theo cú pháp chuẩn: `<Tên_Preset>_<YYYY.MM.DD_HH.MM>.html`  
-     *(Ví dụ: `TM_TFS_realistic_200_2026.11.12_12.30.html`)*.
-   - Nhấn **Save**.
-5. MT5 sẽ tạo ra 1 file `.html` (hoặc `.htm`) và các ảnh đồ thị tương ứng. Bạn có thể mở file này bằng bất kỳ trình duyệt web nào để xem lại bất cứ lúc nào.
+### Các Trụ cột Cốt lõi:
+1. **Robot MQL5 Kỹ thuật**:
+   - **`TM_SessionBreakout` (P0)**: Phá vỡ biên độ phiên Á (Asian Range Breakout) trên khung H1. Đã kiểm chứng 3 năm (PF 1.527 - 1.666).
+   - **`TM_GoldSweepScalper` (P1)**: Bắt nhịp quét thanh khoản giả (Judas Liquidity Sweep) phiên London (07:00 – 10:00 GMT) trên khung M5. Đạt kết quả kiểm định 1 năm tick thật Exness dương lợi nhuận: **PF 1.069, Max Drawdown 7.39%**.
+2. **Hội đồng AI Thẩm định (AI Committee)**:
+   - 5 tác tử độc lập phân tích đa chiều (Kỹ thuật SMC, Tin tức vĩ mô, Biến động ATR, Tranh luận Phe Bò vs Phe Gấu, Chủ tịch Hội đồng phân xử).
+   - Ngăn chặn triệt để các lệnh dính tin bão giá (Non-Farm, CPI) hoặc false breakout.
+3. **Chốt chặn An toàn Bất biến (Hard RiskGate)**:
+   - AI chỉ là bộ lọc, **không bao giờ có quyền nới lỏng rủi ro hay xóa Stop Loss**.
+   - Bắt buộc SL hợp lệ, Max Spread <= 350 pts, rủi ro tối đa <= 1% vốn, khối lượng demo an toàn 0.01 lot.
+   - Có Kill-Switch vật lý ngắt khẩn cấp ngay tức thì.
 
 ---
 
-## 6. CÁCH ĐỌC VÀ ĐÁNH GIÁ CÁC CHỈ SỐ BÁO CÁO
+## 2. CẤU TRÚC THƯ MỤC & VỊ TRÍ CÁC FILE QUAN TRỌNG
 
-Khi xem báo cáo HTML, hãy tập trung vào các chỉ số sau (đừng chỉ nhìn mỗi Net Profit):
+```text
+D:\Applications\TM-EA\
+├── ai_trade/                    # Module Trí tuệ Nhân tạo (Python 3.11+)
+│   ├── bridge/
+│   │   └── mt5_mcp_server.py    # MetaTrader 5 FastMCP Server (11 tools chuẩn)
+│   ├── committee/               # Hội đồng 5 tác tử (Specialists, Debaters, Chair, Orchestrator)
+│   ├── core/
+│   │   ├── models.py            # Hợp đồng dữ liệu Pydantic
+│   │   ├── provider_router.py   # Bộ định tuyến API đa nhà cung cấp (TokenHarbor, Gemini, OpenAI...)
+│   │   ├── risk_gate.py         # Chốt chặn bảo vệ vốn cứng (Hard RiskGate)
+│   │   └── safety.py            # Module an toàn & Kill-Switch khẩn cấp
+│   ├── signals/
+│   │   └── detector.py          # Bộ quét tín hiệu nến real-time M5/H1 từ MT5
+│   ├── storage/
+│   │   └── db.py                # Quản lý cơ sở dữ liệu SQLite
+│   └── runner.py                # File thực thi trung tâm (Paper & Live Trade Runner)
+├── config/
+│   ├── ai/                      # Toàn bộ cấu hình hệ thống AI
+│   │   ├── agents.json          # Thiết lập prompt và phân bổ mô hình cho từng tác tử
+│   │   ├── providers.json       # Danh mục các API Provider (TokenHarbor, Gemini, Ollama...)
+│   │   └── methods_registry.json# Đăng ký các phương pháp định lượng (ICT/SMC, Wyckoff...)
+│   ├── sets/                    # Thư mục chứa các file Preset thông số (.set)
+│   │   ├── TM_GoldSweepScalper/ # Presets cho Gold Sweep Scalper M5
+│   │   └── TM_SessionBreakout/  # Presets cho Session Breakout H1
+│   └── test/                    # Các file cấu hình kiểm thử (.ini)
+├── data/
+│   └── results.db               # Cơ sở dữ liệu SQLite lưu vết toàn bộ quyết định của AI
+├── docs/                        # Toàn bộ tài liệu kỹ thuật, kế hoạch và cẩm nang
+│   ├── README.md                # Bản đồ tài liệu tổng quan
+│   ├── MASTER.md                # Tài liệu điều hành tối cao
+│   ├── USER_GUIDE.md            # Tài liệu này (Hướng dẫn sử dụng từ A-Z)
+│   └── CHANGELOG.md             # Nhật ký cập nhật kỹ thuật
+├── MQL5/
+│   ├── Experts/                 # Mã nguồn EA MQL5 (.mq5 và .ex5)
+│   └── Include/TM_EA/           # Các module MQL5 tái sử dụng (.mqh)
+└── tests/                       # Bộ kiểm thử tự động (Pytest test suite)
+```
 
-| Chỉ số | Tên tiếng Anh | Tiêu chuẩn đánh giá an toàn |
+---
+
+## 3. HƯỚNG DẪN CHẠY BACKTEST ROBOT MQL5 TRÊN MT5
+
+### Quy trình Chuẩn bị Chung
+1. Khởi động phần mềm **MetaTrader 5 Exness**.
+2. Nhấn tổ hợp phím **`Ctrl + R`** để mở cửa sổ **Strategy Tester**.
+3. Tại giao diện ban đầu, chọn mục **Single** (Kiểm thử đơn kỳ).
+
+---
+
+### 3.1. Kiểm thử Robot `TM_GoldSweepScalper` (Khuyên dùng cho M5)
+
+1. **Thiết lập tại tab Settings:**
+   - **Expert**: `TM_GoldSweepScalper.ex5`
+   - **Symbol**: `XAUUSDm` (hoặc `XAUUSD` tùy loại tài khoản)
+   - **Period**: `M5`
+   - **Date**: Chọn khoảng thời gian (Khuyên dùng: `2025.08.01` đến `2026.07.31` để kiểm tra trọn vẹn 1 năm).
+   - **Model**: **`Every tick based on real ticks`** (Bắt buộc chọn mô hình này để test chính xác 100% từng tick thật của sàn Exness).
+   - **Deposit**: `5000` (hoặc `1000`) USD.
+   - **Leverage**: `1:100`.
+   - **Optimization**: `Disabled`.
+2. **Nạp Preset thông số tại tab Inputs:**
+   - Chuyển sang tab **Inputs**.
+   - Nhấp chuột phải -> Chọn **Load**.
+   - Trỏ tới file: [config/sets/TM_GoldSweepScalper/TM_GSS_XAUUSD_M5_BASELINE_v1_0.set](file:///d:/Applications/TM-EA/config/sets/TM_GoldSweepScalper/TM_GSS_XAUUSD_M5_BASELINE_v1_0.set).
+   - Nhấn **Open**.
+3. **Bắt đầu chạy:**
+   - Nhấn nút **Start** màu xanh.
+   - **Kết quả kỳ vọng (Baseline 1 năm tick thật)**:
+     - Lợi nhuận ròng: **+177.68 USD**.
+     - Profit Factor (PF): **1.069**.
+     - Max Equity Drawdown: **7.39%** (Bảo vệ vốn tuyệt đối dưới ngưỡng 8%).
+     - Tần suất: ~13 lệnh / tháng (Rare-fire, chọn lọc kỹ).
+
+---
+
+### 3.2. Kiểm thử Robot `TM_SessionBreakout` (H1 Asian Breakout)
+
+1. **Thiết lập tại tab Settings:**
+   - **Expert**: `TM_SessionBreakout.ex5`
+   - **Symbol**: `XAUUSDm`
+   - **Period**: `H1`
+   - **Date**: `2023.01.01` đến `2026.01.01` (Kiểm thử 3 năm).
+   - **Model**: `Every tick based on real ticks`.
+2. **Nạp Preset tại tab Inputs:**
+   - Nhấp chuột phải -> **Load** -> Chọn [config/sets/TM_SessionBreakout/TM_SB_XAUUSD_H1_BASELINE_v1_0.set](file:///d:/Applications/TM-EA/config/sets/TM_SessionBreakout/TM_SB_XAUUSD_H1_BASELINE_v1_0.set).
+3. **Kết quả kỳ vọng:**
+   - Profit Factor: **1.527 – 1.666**.
+   - Max Equity Drawdown: **< 8.0%**.
+   - Tần suất: ~1 lệnh / ngày giao dịch.
+
+---
+
+## 4. HƯỚNG DẪN CẤU HÌNH & SỬ DỤNG METATRADER 5 FASTMCP SERVER
+
+Hệ thống tích hợp sẵn một máy chủ **FastMCP Server** tại [ai_trade/bridge/mt5_mcp_server.py](file:///d:/Applications/TM-EA/ai_trade/bridge/mt5_mcp_server.py), cho phép AI Agent và IDE giao tiếp trực tiếp với phần mềm MetaTrader 5 đang chạy trên máy.
+
+### 4.1. Cơ chế Hoạt động
+- Máy chủ MCP kết nối ngầm với tệp thực thi MT5 tại:  
+  `C:\Program Files\MetaTrader 5 EXNESS\terminal64.exe`
+- Đã được đăng ký sẵn trong file cấu hình Antigravity toàn cục:  
+  `C:\Users\tuanmjnh\.gemini\config\mcp_config.json` và `settings.json`.
+- Khối lượng giao dịch tối đa qua MCP được giới hạn cứng ở mức: **`0.5 lot`** (để chống lỗi fat-finger).
+
+### 4.2. Danh mục 11 Công cụ (Tools) Sẵn sàng Gọi
+
+| Tên Tool MCP | Mô tả & Chức năng | Tham số chính |
 |---|---|---|
-| **Lợi nhuận ròng** | `Total Net Profit` | Lợi nhuận sau khi trừ toàn bộ các lệnh lỗ. |
-| **Hệ số lợi nhuận** | `Profit Factor (PF)` | **Phải > 1.5** (Khuyến nghị 1.8 - 2.5). Nếu PF < 1.2, chiến lược rất mong manh trước phí giao dịch. |
-| **Tỷ lệ sụt giảm tối đa** | `Maximal Drawdown (Equity)` | **Nên < 15% - 20%**. Đây là mức sụt giảm tài khoản sâu nhất trong suốt giai đoạn test. |
-| **Kỳ vọng mỗi lệnh** | `Expected Payoff` | **Phải > 1.0 USD**. Đại diện cho số tiền kỳ vọng kiếm được trên mỗi lệnh mở ra. |
-| **Tỷ lệ lệnh thắng** | `Profit Trades (% of total)` | Thường từ **35% - 50%**. Vì đây là chiến lược cắt lỗ nhanh và gồng lãi dài, winrate không cần cao vẫn tạo ra lợi nhuận lớn nhờ R:R vượt trội. |
-| **Số lượng giao dịch** | `Total Trades` | Nên có ít nhất **100 - 300 lệnh** trong 3 tháng để mẫu thống kê có độ tin cậy cao. |
+| `mt5_status` | Kiểm tra trạng thái kết nối terminal, số tài khoản, server, số dư và quyền đặt lệnh | Không |
+| `mt5_account_info` | Lấy chi tiết số dư (Balance), vốn thực (Equity), Margin, Margin Level, Đòn bẩy | Không |
+| `mt5_symbol_info` | Đọc giá Bid/Ask thời gian thực, Spread thực tế, Digits, Point của mã Vàng | `symbol` (ví dụ `"XAUUSDm"`) |
+| `mt5_rates` | Lấy dữ liệu nến lịch sử OHLCV đa khung thời gian | `symbol`, `timeframe` (`"M1"` -> `"D1"`), `count` |
+| `mt5_ticks` | Lấy luồng tick giá micro-structure và biến động spread sát sao | `symbol`, `count` (1 đến 200) |
+| `mt5_positions` | Liệt kê toàn bộ các lệnh đang mở kèm lợi nhuận PnL, giá vào, SL, TP | `symbol` (tùy chọn) |
+| `mt5_orders` | Liệt kê các lệnh chờ (Buy Limit, Sell Stop...) đang active | `symbol` (tùy chọn) |
+| `mt5_history_deals` | Truy vấn lịch sử các giao dịch đã đóng để tính toán hiệu suất | `days` (mặc định 7 ngày), `symbol` |
+| `mt5_order_send` | Đặt lệnh thị trường hoặc lệnh chờ có chốt chặn an toàn (bắt buộc SL) | `symbol`, `action` (`"BUY"`, `"SELL"`), `volume`, `sl`, `tp` |
+| `mt5_position_close` | Đóng một vị thế theo mã vé (Ticket) với độ trượt giá quy định | `ticket`, `deviation` |
+| `mt5_position_modify` | Điều chỉnh dời Stop Loss (SL) hoặc Take Profit (TP) cho vị thế đang chạy | `ticket`, `sl`, `tp` |
 
 ---
 
-## 7. HƯỚNG DẪN CÀI ĐẶT CHẠY FORWARD TEST DEMO TRÊN BIỂU ĐỒ
+## 5. HƯỚNG DẪN VẬN HÀNH HỆ THỐNG AI TRADE ORCHESTRATOR
 
-Sau khi đã hài lòng với kết quả backtest, bước tiếp theo là treo demo 24/5 trên tài khoản demo Exness để theo dõi trượt giá thực tế:
+Module trung tâm `ai_trade.runner` điều phối toàn bộ chu trình thông minh từ quét nến, phân tích hội đồng đến vào lệnh.
 
-### Bước 1: Cho phép giao dịch tự động trên MT5
-1. Vào menu **Tools -> Options** (hoặc `Ctrl + O`).
-2. Chọn tab **Expert Advisors**.
-3. Tích chọn các ô:
-   - ✅ **Allow automated trading** (Cho phép giao dịch tự động).
-   - ✅ **Allow WebRequest for listed URL** (nếu dùng các dịch vụ đọc tin ngoài).
-4. Nhấn **OK**.
-5. Trên thanh công cụ chính của MT5, hãy chắc chắn nút **Algo Trading** (Giao dịch tự động) đang có màu **Xanh lá**.
+Mở terminal PowerShell tại thư mục dự án `D:\Applications\TM-EA\`:
 
-### Bước 2: Mở biểu đồ và kéo EA vào
-1. Tại cửa sổ **Market Watch** (`Ctrl + M`), chuột phải vào `XAUUSDm` chọn **Chart Window**.
-2. Chọn khung thời gian biểu đồ là **M5**.
-3. Tại cửa sổ **Navigator** (`Ctrl + N`), tìm mục **Expert Advisors** -> bạn sẽ thấy **`TM_TrendFollowerScalper`**.
-4. Kéo thả EA vào biểu đồ `XAUUSDm, M5`.
-5. Hộp thoại cấu hình hiện ra:
-   - Tab **Common**: Tích chọn **Allow Algo Trading**.
-   - Tab **Inputs**: Nhấn nút **Load**, chọn preset mong muốn (ví dụ `TM_TFS_realistic_200.set` hoặc `TM_TFS_realistic_500.set`).
-   - Nhấn **OK**.
+### 5.1. Chế độ Paper Trading (Khuyên dùng khi mới làm quen)
+Chế độ này phân tích thị trường thật, triệu tập đầy đủ Hội đồng AI tranh luận nhưng **CHỈ GHI LOG VÀO DATABASE, TUYỆT ĐỐI KHÔNG ĐẶT LỆNH THẬT**.
 
-### Bước 3: Kiểm tra Dashboard trên màn hình
-- Ở góc trên bên trái biểu đồ, bạn sẽ thấy bảng điều khiển (Dashboard) hiển thị:
-  - `TM_TrendFollowerScalper V1`
-  - `Trend: UPTREND / DOWNTREND / SIDEWAYS`
-  - `ADX`, `Fast EMA`, `Slow EMA`, `ATR`, `Spread`...
-- Ở góc trên bên phải biểu đồ xuất hiện biểu tượng chiếc mũ màu xanh/mặt cười -> EA đang chạy và sẵn sàng bắt tín hiệu!
+- **Chạy kiểm nghiệm 1 chu kỳ duy nhất (Single pass) rồi thoát:**
+  ```powershell
+  python -m ai_trade.runner --once --mode paper
+  ```
+- **Chạy vòng lặp tự động liên tục (Mặc định quét mỗi 30 giây):**
+  ```powershell
+  python -m ai_trade.runner --interval 30 --mode paper
+  ```
+- **Tùy chỉnh mã giao dịch:**
+  ```powershell
+  python -m ai_trade.runner --symbol XAUUSDm --interval 15 --mode paper
+  ```
 
 ---
 
-## 8. CÁC SỰ CỐ THƯỜNG GẶP & CÁCH KHẮC PHỤC
+### 5.2. Chế độ Live Demo Forward (Khớp lệnh tự động vào MT5)
+Chế độ này sẽ thực sự gửi lệnh vào tài khoản MetaTrader 5 (khuyên dùng trên **Tài khoản Demo Exness**).
 
-### 1. Backtest ra 0 lệnh (`Total Net Profit = 0`, 0 trades)
-- **Kiểm tra 1 (Lỗi phổ biến nhất - Spread quá cao)**:
-  - Mở tab Journal trong tester, nếu thấy dòng `Entry blocked by risk guard: spread too high (current=250 max=35)`:
-  - *Khắc phục*: Tải lại preset mới nhất có `Max_Spread_Points = 350` (hoặc 400).
-- **Kiểm tra 2 (Thiếu dữ liệu lịch sử)**:
-  - Nếu tester báo `history quality 0%` hoặc `0 bars`: Do MT5 chưa tải đủ nến.
-  - *Khắc phục*: Mở biểu đồ `XAUUSDm` trên màn hình, bấm các khung M5, M15, H1, cuộn lùi về quá khứ vài tháng để MT5 tự động tải nến về máy.
-- **Kiểm tra 3 (Vốn quá nhỏ so với mức rủi ro)**:
-  - Nếu vốn 50 USD mà đặt risk 1% ($0.50), sàn không cho vào lệnh 0.01 lot vì SL vàng lớn hơn $0.50.
-  - *Khắc phục*: Sử dụng preset vốn từ 200 USD hoặc chuyển sang tài khoản Cent.
-- **Kiểm tra 4 (Lỗi `news calendar unavailable` trong Strategy Tester)**:
-  - Máy chủ tester MT5 không cung cấp dữ liệu lịch ngoại tuyến, khiến bot chặn lệnh ban ngày.
-  - *Khắc phục*: EA từ phiên bản **v1.2** đã tự động nhận diện môi trường tester (`MQL_TESTER`) để không chặn backtest, đồng thời vẫn kích hoạt kiểm tra tin tức 100% khi chạy trên tài khoản Demo/Real.
-
-### 2. EA không vào lệnh trên biểu đồ Live Demo
-- Kiểm tra nút **Algo Trading** trên thanh công cụ xem có màu xanh chưa.
-- Kiểm tra góc trên bên phải biểu đồ: Nếu chiếc mũ màu xanh/mặt cười là OK, nếu có dấu x đỏ là bạn chưa bật quyền giao dịch tự động.
-- Kiểm tra Dashboard: Nếu `Trend: SIDEWAYS/NONE`, EA đang cố tình đứng ngoài để bảo vệ tài khoản vì thị trường chưa có xu hướng rõ ràng. Đây là hành vi hoàn toàn bình thường.
+- **Lệnh chạy tự động (Khối lượng an toàn cố định 0.01 lot):**
+  ```powershell
+  python -m ai_trade.runner --interval 30 --mode live --lot 0.01
+  ```
+- **Cơ chế an toàn tự động áp dụng:**
+  - Nếu Hội đồng ra phán quyết `HOLD` hoặc `CANCEL`: **Không vào lệnh**.
+  - Nếu Hội đồng ra phán quyết `BUY` hoặc `SELL`: Lệnh chỉ được gửi đi nếu vượt qua 6 lớp kiểm duyệt của **Hard RiskGate**.
+  - Nếu vi phạm (ví dụ SL ngược chiều, Spread dãn quá 350 pts): **Lệnh bị hủy ngay lập tức**.
 
 ---
 
-> 📌 **LỜI KHUYÊN KỶ LUẬT CUỐI CÙNG**:
-> - `[v2.0]` Take Profit đã được bật mặc định (`Use_TP=true`, `TP_ATR_Mult`). Không tắt SL; không hạ thấp các guard; giữ `Max_Equity_DD_Percent` bật.
-> - Tuyệt đối không bao giờ tắt Stop Loss.
-> - Luôn chạy Forward Test Demo tối thiểu 2 - 4 tuần trước khi nghĩ tới việc nạp tiền thật.
+### 5.3. Quy trình Hội đồng AI 5 Tác tử Phân tích & Bầu phiếu
 
+Mỗi khi xuất hiện tín hiệu nến (Setup), quy trình sau sẽ diễn ra tự động trong **< 3 giây**:
+
+```text
+[Signal Detected: M5 London Judas Sweep]
+   │
+   ├── 1. Technical Analyst: Đánh giá độ xuyên quét thanh khoản & nến xác nhận SMC.
+   ├── 2. News/Sentiment Analyst: Tra cứu lịch kinh tế, đảm bảo không có tin đỏ Mỹ.
+   ├── 3. Risk Analyst: Đánh giá spread hiện tại và biến động ATR.
+   │
+   ├── 4. Vòng Tranh luận (Debate):
+   │      - Bull Advocate: Nêu luận điểm mua và phản bác rủi ro.
+   │      - Bear Advocate: Nêu luận điểm bán và cảnh báo bẫy giá.
+   │
+   ├── 5. Chủ tịch Hội đồng (Committee Chair):
+   │      - Đưa ra Phán quyết tối cao (5-Tier Verdict):
+   │        * STRONG_BUY / BUY (100% volume đề xuất)
+   │        * OVERWEIGHT (50% - 70% volume)
+   │        * HOLD (Hủy lệnh, đứng ngoài thị trường)
+   │        * UNDERWEIGHT (Giảm volume)
+   │        * SELL / STRONG_SELL (100% sell volume)
+   │
+   └── 6. Hard RiskGate: Kiểm tra tính toán học trước khi đẩy ra MT5 Terminal.
+```
+
+---
+
+### 5.4. Vòng lặp Tự tiến hóa & Tối ưu hóa Tham số (Self-Evolution Engine)
+
+Hệ thống cho phép AI tự động đột biến tham số chiến lược trong vùng `AI_MUTATION_ZONE`, tự chạy backtest, tự kiểm định Walk-Forward OOS và tự động Rollback nếu hiệu suất suy giảm:
+
+- **Chạy kiểm nghiệm nhanh 3 chu kỳ tiến hóa (Chế độ mô phỏng nhanh):**
+  ```powershell
+  python -m ai_trade.evolution.optimizer --cycles 3 --mock
+  ```
+- **Chạy tiến hóa kết hợp Strategy Tester MT5 trên tick thật:**
+  ```powershell
+  python -m ai_trade.evolution.optimizer --cycles 1 --strategy TM_GoldSweepScalper
+  ```
+- **Quay về bản tham số Champion trước đó (Auto-Rollback):**
+  ```powershell
+  python -m ai_trade.evolution.optimizer --rollback
+  ```
+- **Cơ chế an toàn cốt lõi:**
+  - AI chỉ được phép đột biến trong `AI_MUTATION_ZONE` (ví dụ `Sweep_RR`, `Min_Range_ATR`, `Breakeven_ATR_Mult`).
+  - Các khối bảo vệ vốn (`RiskPercentPerTrade`, `Max_Spread_Points`, `Circuit_Breaker_DD_Pct`) **được đóng băng vĩnh viễn (Frozen)**.
+  - Nếu Profit Factor của biến thể mới bị suy giảm > 10% so với baseline cũ: **Hệ thống tự động hủy và Rollback về Champion cũ**.
+  - Toàn bộ lịch sử tiến hóa được ghi nhận minh bạch tại file [config/ai/lineage_tree.json](file:///d:/Applications/TM-EA/config/ai/lineage_tree.json).
+
+---
+
+## 6. CƠ CHẾ NGẮT KHẨN CẤP — PHYSICAL KILL-SWITCH
+
+Khi thị trường xảy ra thiên nga đen (Black Swan), tin tức chiến tranh bất ngờ, hoặc bạn muốn dừng toàn bộ hoạt động giao dịch ngay lập tức:
+
+### 6.1. Kích hoạt Khẩn cấp qua Dòng lệnh (CLI)
+Chạy lệnh sau tại PowerShell:
+```powershell
+python -m ai_trade.runner --kill
+```
+**Hệ thống sẽ thực hiện ngay 3 hành động song song:**
+1. Tạo lập tức file cờ `config/ai/KILL`.
+2. Đóng sạch toàn bộ các vị thế Vàng đang mở trên MT5.
+3. Hủy bỏ toàn bộ các lệnh chờ (Pending orders) đang active.
+
+### 6.2. Kích hoạt Thủ công qua File Cờ
+Chỉ cần tạo một file trống có tên `KILL` bên trong thư mục [config/ai/](file:///d:/Applications/TM-EA/config/ai/):
+- Đường dẫn: `d:\Applications\TM-EA\config\ai\KILL`
+- Ngay tại tick quét tiếp theo, Runner sẽ thông báo:
+  ```text
+  [CRITICAL] 🛑 [KILL-SWITCH ACTIVE] Trading cycle aborted. config/ai/KILL detected.
+  ```
+  Và tự động từ chối mọi hoạt động giao dịch.
+
+### 6.3. Mở lại Hệ thống Giao dịch Bình thường
+Sau khi tình hình thị trường ổn định, để cho phép hệ thống hoạt động trở lại:
+- Xóa file `config/ai/KILL` (hoặc file `config/KILL` nếu có).
+- Hoặc chạy lệnh Python:
+  ```powershell
+  python -c "from ai_trade.core.safety import clear_kill; clear_kill()"
+  ```
+
+---
+
+## 7. TRA CỨU DỮ LIỆU & ĐÁNH GIÁ HIỆU SUẤT (SQLite RESULTS.DB)
+
+Toàn bộ quá trình ra quyết định của AI và kết quả giao dịch được lưu trữ vĩnh viễn tại tệp cơ sở dữ liệu SQLite:  
+`d:\Applications\TM-EA\data\results.db`
+
+### Cách Tra cứu Nhanh qua PowerShell:
+
+1. **Xem 5 quyết định gần nhất của Hội đồng AI:**
+   ```powershell
+   python -c "
+   import sqlite3
+   conn = sqlite3.connect('data/results.db')
+   c = conn.cursor()
+   c.execute('SELECT id, timestamp, symbol, source_setup, verdict, confidence, validation_passed FROM trade_decisions ORDER BY id DESC LIMIT 5')
+   for r in c.fetchall():
+       print(f'ID #{r[0]} | {r[1]} | {r[2]} | Setup: {r[3]} | Phán quyết: {r[4]} | Tin cậy: {r[5]*100:.0f}% | RiskGate: {bool(r[6])}')
+   conn.close()
+   "
+   ```
+
+2. **Xem chi tiết lập luận của Chủ tịch Hội đồng tại một lệnh cụ thể (Ví dụ ID #10):**
+   ```powershell
+   python -c "
+   import sqlite3
+   conn = sqlite3.connect('data/results.db')
+   c = conn.cursor()
+   c.execute('SELECT id, verdict, chair_reasoning FROM trade_decisions WHERE id=10')
+   row = c.fetchone()
+   print(f'ID #{row[0]} Phán quyết: {row[1]}\nLý do: {row[2]}')
+   conn.close()
+   "
+   ```
+
+---
+
+## 8. XỬ LÝ SỰ CỐ THƯỜNG GẶP (TROUBLESHOOTING)
+
+| Hiện tượng | Nguyên nhân | Cách khắc phục triệt để |
+|---|---|---|
+| `MT5 Terminal not connected: False` | Phần mềm MetaTrader 5 chưa được bật trên máy tính. | Mở MetaTrader 5 Exness lên và đăng nhập vào tài khoản trước khi chạy script Python. |
+| `OrderSend error 10027 (AutoTrading disabled)` | Chưa bật nút cho phép robot đặt lệnh trên MT5. | Trên thanh công cụ MT5, nhấn bật nút **`Algo Trading`** (biểu tượng chuyển sang màu xanh lá). |
+| `Symbol 'XAUUSDm' not found` | Loại tài khoản của bạn dùng ký hiệu khác (ví dụ tài khoản Standard là `XAUUSD`, tài khoản Cent là `XAUUSDc`). | Truyền cờ `--symbol XAUUSD` tương ứng khi chạy lệnh: `python -m ai_trade.runner --symbol XAUUSD`. |
+| `BLOCKED BY HARD RISKGATE: SPREAD_EXCEEDED` | Thị trường ban đêm hoặc lúc ra tin có spread dãn vượt ngưỡng 350 pts. | Đây là tính năng bảo vệ vốn tự động. Hệ thống sẽ tự giao dịch trở lại khi spread co hẹp bình thường. |
+| `BLOCKED BY HARD RISKGATE: KILL_SWITCH_ACTIVE` | Đang tồn tại file cờ ngắt khẩn cấp `config/ai/KILL`. | Xóa file `config/ai/KILL` để mở lại hệ thống. |
+| `ModuleNotFoundError: No module named 'fastmcp'` | Chưa cài đặt thư viện vào Python 3.11. | Chạy lệnh: `pip install fastmcp MetaTrader5 pydantic pytest`. |
+| Lệnh kiểm thử báo lỗi import DLL `pywintypes` | Xung đột thư viện `pywin32` trên Windows. | Đã được khắc phục trong file `mt5_mcp_server.py` bằng việc ưu tiên import `fastmcp` thuần. |
+
+---
+
+## 9. CHECKLIST HÀNG NGÀY CHO TRADER (DAILY ROUTINE)
+
+- [ ] **Đầu ngày (06:45 GMT / 13:45 VN)**: Bật MT5 Terminal, kiểm tra kết nối tài khoản.
+- [ ] **Kiểm tra trạng thái**: Chạy lệnh kiểm tra nhanh `python -m ai_trade.runner --once --mode paper`.
+- [ ] **Bật Runner**: Bật chế độ chạy nền `python -m ai_trade.runner --interval 30 --mode live --lot 0.01` trong suốt phiên London (07:00 – 10:00 GMT).
+- [ ] **Cuối ngày**: Tra cứu `data/results.db` để kiểm tra các quyết định của AI và đối soát PnL với lịch sử lệnh trên MT5.
+- [ ] **Khi có sự cố**: Dùng lệnh `python -m ai_trade.runner --kill` để ngắt khẩn cấp.

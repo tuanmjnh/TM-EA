@@ -5,6 +5,61 @@
 ---
 
 ```yaml
+[2026-11-20] - v5.1 (PHASE 3 SELF-EVOLUTION ENGINE & WALK-FORWARD OOS COMPLETE)
+Thay doi:
+  - Hoàn thiện toàn bộ các module của Giai đoạn 3 (Phase 3: Self-Evolution Loop) theo ACTION_PLAN_AI_TRADE.md:
+    + 1. Thiết lập "AI Mutation Zone" trong MQL5: Đánh dấu các vùng tham số chiến lược được phép đột biến (`AI_MUTATION_ZONE_START` / `END`) trong `TM_GoldSweepScalper.mq5` và `TM_SessionBreakout.mq5`, đóng băng vĩnh viễn các khối code an toàn (`FROZEN SAFETY CODE`).
+    + 2. Module Strategy Tester Headless Runner (`ai_trade/evolution/tester_runner.py`): Tự động sinh file cấu hình `.ini` (Model=4 Real Ticks), khởi chạy MT5 Terminal ngầm và bóc tách báo cáo HTML trích xuất Net Profit, Profit Factor, Max Drawdown %, Trades, Win Rate.
+    + 3. Bộ kiểm định Out-Of-Sample & Stress Testing (`ai_trade/evolution/validator.py`):
+      * Walk-Forward Analysis (WFA) phân đoạn 4 cửa sổ x 2 (IS/OOS) đo lường WFA Efficiency Ratio chống over-fitting.
+      * Monte Carlo Simulator 100 lần xáo trộn xác định Drawdown 95th percentile và rủi ro sụt giảm vốn (Risk of Ruin <= 1.0%).
+    + 4. Quản lý Phả hệ & Auto-Rollback (`ai_trade/evolution/lineage.py`): Quản lý cây phả hệ tham số `config/ai/lineage_tree.json`. Nếu biến thể mới bị suy giảm hiệu suất (Regression > 10% PF degradation) hoặc Max Drawdown vượt ngưỡng -> Tự động từ chối và kích hoạt Rollback về baseline ổn định.
+    + 5. Trình điều phối Tự tiến hóa (`ai_trade/evolution/optimizer.py`): Tự động lấy baseline, tạo biến dị, chạy backtest, kiểm định OOS và thăng hạng champion mới.
+    + 6. Mở rộng test suite tự động: Bổ sung `tests/test_evolution.py` với 5 bài test chuyên sâu, nâng tổng số test lên 11/11 tests passed 100%.
+
+[2026-11-20] - v5.0 (PHASE 2 HARD RISKGATE, SAFETY KILL-SWITCH & LIVE TRADE RUNNER COMPLETE)
+Thay doi:
+  - Hoàn thiện toàn bộ các mắt xích kỹ thuật của Giai đoạn 2 (Phase 2) theo ACTION_PLAN_AI_TRADE.md:
+    + 1. Safety Module & Kill-Switch vật lý (`ai_trade/core/safety.py`): Triển khai cơ chế ngắt khẩn cấp vật lý qua file cờ `config/ai/KILL`, tự động quét và đóng toàn bộ vị thế/lệnh chờ khi có sự cố.
+    + 2. Signal Detector (`ai_trade/signals/detector.py`): Quét nến MT5 real-time, tính toán động biên độ phiên Á (Asian Range 00:00-06:00 GMT), ATR và phát hiện chính xác cả 2 setup:
+      * TM_GoldSweepScalper (London Kill-Zone M5 Judas Liquidity Sweep Reversal).
+      * TM_SessionBreakout (H1 Asian Range Breakout).
+    + 3. Trade Runner đa chế độ (`ai_trade/runner.py`): Đóng gói toàn bộ luồng vận hành từ MT5 Rates -> Signal Detector -> Multi-Agent Committee -> Hard RiskGate -> MT5 Order Execution. Hỗ trợ cả 2 chế độ:
+      * `--mode paper`: Chạy phân tích ảo, không vào lệnh, lưu đầy đủ bằng chứng vào SQLite `data/results.db`.
+      * `--mode live`: Đặt lệnh tự động vào Exness MT5 Terminal kèm kiểm soát an toàn (khối lượng demo 0.01 lot, bắt buộc SL/TP, slippage 20 pts).
+    + 4. Bộ kiểm thử tự động: Bổ sung `tests/test_safety_and_signals.py`, nâng tổng số test lên 6/6 tests passed 100%.
+    + 5. Chạy thực tế thành công một chu trình khép kín end-to-end trên Terminal Exness (`Account: 464140826`), ghi nhận quyết định #10 vào cơ sở dữ liệu.
+
+[2026-11-20] - v4.9 (MT5 MCP SERVER BRIDGE & AI CONFIG DIRECTORY CONSOLIDATION)
+Thay doi:
+  - Di chuyển & gom nhóm toàn bộ cấu hình AI Trade vào thư mục chuyên biệt: `config/ai/` (`agents.json`, `methods_registry.json`, `providers.json`).
+  - Cập nhật `ProviderRouter` và `AIOrchestrator` tự động ưu tiên đường dẫn `config/ai/` với cơ chế fallback hai tầng, bảo đảm tính tương thích ngược hoàn hảo.
+  - Xây dựng thành công MetaTrader 5 FastMCP Server hoàn chỉnh (`ai_trade/bridge/mt5_mcp_server.py`) gồm 11 công cụ giao tiếp MT5:
+    + 1. `mt5_status`: Kiểm tra trạng thái kết nối terminal, latency và chế độ giao dịch.
+    + 2. `mt5_account_info`: Truy vấn số dư (Balance), vốn thực (Equity), Margin, Đòn bẩy, Tiền tệ.
+    + 3. `mt5_symbol_info`: Truy vấn giá Bid/Ask, Spread thực tế, Point, Digits và quy cách khối lượng (XAUUSDm / XAUUSD).
+    + 4. `mt5_rates`: Lấy dữ liệu nến lịch sử đa khung thời gian (M1 -> D1) phục vụ phân tích kỹ thuật.
+    + 5. `mt5_ticks`: Lấy luồng tick thời gian thực phục vụ phân tích vi cấu trúc orderflow và biến động spread.
+    + 6. `mt5_positions`: Liệt kê các vị thế đang mở kèm PnL, SL, TP, Magic number.
+    + 7. `mt5_orders`: Liệt kê các lệnh chờ (Pending orders) đang kích hoạt.
+    + 8. `mt5_history_deals`: Lấy lịch sử giao dịch đã đóng để đối soát và đánh giá hiệu suất.
+    + 9. `mt5_order_send`: Đặt lệnh thị trường/lệnh chờ với chốt chặn an toàn cứng (Max Lot Safety Cap 0.5 lot, bắt buộc Stop Loss).
+    + 10. `mt5_position_close`: Đóng vị thế theo ticket với độ trượt giá (deviation) được kiểm soát.
+    + 11. `mt5_position_modify`: Điều chỉnh SL/TP cho các vị thế đang mở.
+  - Tích hợp và đăng ký MT5 MCP Server vào cấu hình toàn cục Antigravity (`C:\Users\tuanmjnh\.gemini\config\mcp_config.json`, `settings.json`) và tự động xuất 11 schemas JSON cùng tài liệu hướng dẫn (`C:\Users\tuanmjnh\.gemini\antigravity\mcp\mt5/`).
+  - Xác thực kết nối trực tiếp thành công với Exness MT5 Terminal (Account: 464140826, Server: Exness-MT5Trial17).
+
+[2026-11-20] - v4.8 (PHASE 1 AI TRADE ORCHESTRATOR COMPLETE)
+Thay doi:
+  - Hoan thanh toan bo cac hang muc Giai doan 1 (Phase 1: Foundation & Paper Mode) theo ACTION_PLAN_AI_TRADE.md:
+    + 1. Khoi tao scaffolding ma nguon Python: ai_trade/core, ai_trade/committee, ai_trade/storage, ai_trade/bridge.
+    + 2. Cau hinh Provider & Agents: config/providers.json, config/agents.json, config/methods_registry.json.
+    + 3. Xay dung ProviderRouter: ho tro endpoint OpenAI-compatible (TokenHarbor, OpenAI, DeepSeek, Ollama) va che do Offline Quantitative Simulation Engine dua tren ICT/SMC rules de chay paper test 0 cost.
+    + 4. Xay dung Multi-Agent Committee: TechnicalAnalyst, NewsSentimentAnalyst, VolatilityRiskAnalyst, BullAdvocate, BearAdvocate va CommitteeChair voi quy trinh tranh luan 2 vong.
+    + 5. Dong goi Hard RiskGate: kiem duyet 6 lop an toan (SL hop le, huong SL/TP, max spread, risk cap, kill-switch).
+    + 6. Co so du lieu SQLite: khoi tao data/results.db va module ai_trade/storage/db.py ghi nhan toan bo quyet dinh va PnL thuc te.
+    + 7. Test suite: tests/test_ai_committee.py (4/4 tests passed 100%) va runner Paper Trading tests/run_paper_committee.py chay thanh cong ca 2 dang tin hieu H1 Asian Breakout va M5 London Judas Sweep.
+
 [2026-11-19] - v4.7 (STANDARDIZE SPEC_AI_TRADE_MODULE & AI ACTION PLAN)
 Thay doi:
   - Chuan hoa toan dien tai lieu dac ta kien truc AI Trade Orchestrator (docs/SPEC_AI_TRADE_MODULE.md):

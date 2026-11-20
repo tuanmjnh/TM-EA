@@ -1,0 +1,70 @@
+{
+  "active_baseline_id": "v1.0-baseline",
+  "last_updated": "2026-11-20T05:50:06.745645+00:00",
+  "total_variants": 3,
+  "variants": {
+    "v1.0-baseline": {
+      "version_id": "v1.0-baseline",
+      "parent_id": null,
+      "timestamp": "2026-11-20T05:49:58.407932+00:00",
+      "strategy": "TM_GoldSweepScalper",
+      "mutated_params": {
+        "Sweep_RR": 3.0,
+        "Enable_LondonKZ": true,
+        "Enable_NYKZ": false,
+        "Enable_Trailing": false,
+        "RiskPercentPerTrade": 0.5
+      },
+      "net_profit": 177.68,
+      "profit_factor": 1.069,
+      "max_drawdown_pct": 7.395,
+      "total_trades": 158,
+      "wfa_passed": true,
+      "mc_passed": true,
+      "status": "BASELINE",
+      "notes": "1-Year Full Real-Tick Baseline (2025.08 - 2026.07)"
+    },
+    "v1.1-mut-304": {
+      "version_id": "v1.1-mut-304",
+      "parent_id": "v1.0-baseline",
+      "timestamp": "2026-11-20T05:49:58.415922+00:00",
+      "strategy": "TM_GoldSweepScalper",
+      "mutated_params": {
+        "Sweep_RR": 3.25,
+        "Enable_LondonKZ": true,
+        "Enable_NYKZ": false,
+        "Enable_Trailing": false,
+        "RiskPercentPerTrade": 0.5
+      },
+      "net_profit": 190.98,
+      "profit_factor": 1.149,
+      "max_drawdown_pct": 7.099,
+      "total_trades": 160,
+      "wfa_passed": true,
+      "mc_passed": true,
+      "status": "ROLLED_BACK",
+      "notes": "Accepted: Improved or matched baseline performance. Promoted from parent v1.0-baseline. | Rolled back: CLI user rollback requested"
+    },
+    "v1.2-mut-841": {
+      "version_id": "v1.2-mut-841",
+      "parent_id": "v1.1-mut-304",
+      "timestamp": "2026-11-20T05:49:58.425448+00:00",
+      "strategy": "TM_GoldSweepScalper",
+      "mutated_params": {
+        "Sweep_RR": 2.0,
+        "Enable_LondonKZ": true,
+        "Enable_NYKZ": false,
+        "Enable_Trailing": false,
+        "RiskPercentPerTrade": 0.5
+      },
+      "net_profit": 166.05,
+      "profit_factor": 0.999,
+      "max_drawdown_pct": 7.631,
+      "total_trades": 160,
+      "wfa_passed": false,
+      "mc_passed": true,
+      "status": "REJECTED_REGRESSION",
+      "notes": "Rejected: PF degraded by 13.1% (> 10% limit) vs baseline v1.1-mut-304"
+    }
+  }
+}

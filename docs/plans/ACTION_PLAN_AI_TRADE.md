@@ -119,21 +119,30 @@
 
 - [x] Chuẩn hóa toàn diện tài liệu đặc tả kỹ thuật `SPEC_AI_TRADE_MODULE.md`.
 - [x] Soạn thảo Kế hoạch hành động tổng thể `ACTION_PLAN_AI_TRADE.md`.
-- [ ] **Phase 1: Khởi tạo scaffolding mã nguồn Python:**
-  - [ ] Tạo thư mục `ai_trade/` và thiết lập môi trường `requirements.txt`.
-  - [ ] Tạo file cấu hình `config/providers.json` và `config/agents.json`.
-  - [ ] Xây dựng module `provider_router.py` hỗ trợ Gemini / DeepSeek / OpenAI.
-  - [ ] Xây dựng các tác tử hội đồng tranh luận (`specialists.py`, `bull_bear.py`, `chair.py`).
-  - [ ] Khởi tạo SQLite DB `data/results.db`.
-  - [ ] Thực hiện 100 bài test Paper Mode đối chiếu kết quả.
-- [ ] **Phase 2: Chốt chặn an toàn & Demo Cent:**
-  - [ ] Triển khai `risk_gate.py` với 5 lớp bảo vệ cứng.
-  - [ ] Kết nối MT5 Bridge MCP client.
-  - [ ] Thử nghiệm cơ chế Kill-Switch `config/KILL`.
-  - [ ] Kết nối vận hành trực tiếp trên Exness Demo Cent (5,000 USC).
-- [ ] **Phase 3: Vòng lặp Tự tiến hóa:**
-  - [ ] Đánh dấu vùng `AI_MUTATION_ZONE` trong mã MQL5.
-  - [ ] Tích hợp công cụ chạy Strategy Tester tự động qua MCP.
-  - [ ] Xây dựng thuật toán Walk-Forward và Monte Carlo.
-  - [ ] Kích hoạt Lineage Tree và cơ chế Auto-Rollback.
+- [x] **Phase 1: Khởi tạo scaffolding mã nguồn Python & Cấu hình:**
+  - [x] Tạo thư mục `ai_trade/` và thiết lập môi trường `requirements.txt`.
+  - [x] Chuyển và chuẩn hóa các file cấu hình vào `config/ai/` (`config/ai/providers.json`, `config/ai/agents.json`, `config/ai/methods_registry.json`).
+  - [x] Xây dựng module `provider_router.py` hỗ trợ Gemini / DeepSeek / OpenAI / TokenHarbor, cơ chế fallback đường dẫn cấu hình và Offline Quant Simulation Engine.
+  - [x] Xây dựng các tác tử hội đồng tranh luận (`specialists.py`, `debater.py`, `chair.py`, `orchestrator.py`).
+  - [x] Khởi tạo SQLite DB `data/results.db` và module quản lý `ai_trade/storage/db.py`.
+  - [x] Xây dựng Mock MT5 Bridge (`ai_trade/bridge/mock_bridge.py`) cho cả H1 Breakout và M5 Sweep.
+  - [x] Viết bộ kiểm thử toàn diện `tests/test_ai_committee.py` (4/4 tests passed 100%).
+  - [x] Chạy thực tế thành công runner Paper Trading `tests/run_paper_committee.py` (lưu vết ID #5, #6 vào database).
+- [x] **Phase 2: Chốt chặn an toàn, MT5 MCP & Live Runner:**
+  - [x] Triển khai `risk_gate.py` với 6 lớp bảo vệ cứng và kiểm duyệt hướng SL/TP động.
+  - [x] Xây dựng MT5 FastMCP Server hoàn chỉnh (`ai_trade/bridge/mt5_mcp_server.py`) gồm 11 tools giao tiếp MT5 (Status, Account, Symbol Info, Rates, Ticks, Positions, Orders, History Deals, Order Send, Close, Modify).
+  - [x] Đăng ký MT5 MCP server vào cấu hình toàn cục (`C:\Users\tuanmjnh\.gemini\config\mcp_config.json`, `settings.json`) và trích xuất tool schema vào `C:\Users\tuanmjnh\.gemini\antigravity\mcp\mt5\`.
+  - [x] Kiểm thử kết nối trực tiếp thành công với Exness MT5 Terminal (Account: 464140826, Server: Exness-MT5Trial17).
+  - [x] Xây dựng module an toàn & Kill-Switch vật lý (`ai_trade/core/safety.py`), kiểm thử ngắt khẩn cấp và dọn dẹp lệnh thành công.
+  - [x] Xây dựng bộ quét tín hiệu thị trường thời gian thực (`ai_trade/signals/detector.py`) cho cả M5 London Sweep và H1 Asian Breakout.
+  - [x] Xây dựng Trade Runner đa chế độ (`ai_trade/runner.py`) khép kín toàn bộ chu trình MT5 Rates -> Signal -> AI Committee -> Hard RiskGate -> MT5 Order Execution.
+  - [x] Mở rộng bộ kiểm thử tự động `tests/test_safety_and_signals.py` (Toàn bộ 6/6 tests passed 100%).
+  - [ ] Vận hành Forward Demo thực tế theo phiên (London/NY) ghi nhận tối thiểu 50 lệnh thực tế.
+- [x] **Phase 3: Vòng lặp Tự tiến hóa & Kiểm định OOS:**
+  - [x] Đánh dấu vùng `AI_MUTATION_ZONE` và đóng băng `FROZEN SAFETY CODE` trong `TM_GoldSweepScalper.mq5` và `TM_SessionBreakout.mq5`.
+  - [x] Xây dựng công cụ chạy Strategy Tester tự động qua Python (`ai_trade/evolution/tester_runner.py`), tự sinh file `.ini` và bóc tách báo cáo HTML.
+  - [x] Xây dựng module kiểm định Walk-Forward (4 cửa sổ x 2) và Monte Carlo 100 kịch bản (`ai_trade/evolution/validator.py`).
+  - [x] Thiết lập Lineage Tree (`config/ai/lineage_tree.json`) và cơ chế Auto-Rollback khi regression > 10% (`ai_trade/evolution/lineage.py`).
+  - [x] Xây dựng Self-Evolution Orchestrator (`ai_trade/evolution/optimizer.py`) điều phối chu trình đột biến -> kiểm thử -> sàng lọc -> thăng hạng.
+  - [x] Mở rộng bộ kiểm thử tự động `tests/test_evolution.py` (Toàn bộ 11/11 tests passed 100%).
 - [ ] **Phase 4: Nghiệm thu và Cân nhắc Live.**
