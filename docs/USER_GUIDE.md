@@ -190,6 +190,17 @@ Hệ thống tích hợp sẵn một máy chủ **FastMCP Server** tại [ai_tra
 
 Module trung tâm `ai_trade.runner` điều phối toàn bộ chu trình thông minh từ quét nến, phân tích hội đồng đến vào lệnh.
 
+### Bộ Kịch bản Vận hành 1-Click (Operational Launcher Suite)
+Để thuận tiện tối đa cho việc vận hành hằng ngày mà không cần nhớ cú pháp câu lệnh dài, hệ thống cung cấp sẵn bộ file script trong thư mục `scripts/`:
+
+| Tên kịch bản | File chạy nhanh (Windows Explorer) | File PowerShell | Chức năng chính |
+|---|---|---|---|
+| **Live Forward Demo** | [scripts/run_live.bat](file:///d:/Applications/TM-EA/scripts/run_live.bat) | `scripts/run_live.ps1` | Bật runner giao dịch thật trên Exness Demo (M5 Sweep + H1 Breakout, 0.01 lot, 30s/lần) |
+| **Paper Forward Demo** | [scripts/run_paper.bat](file:///d:/Applications/TM-EA/scripts/run_paper.bat) | `scripts/run_paper.ps1` | Bật runner phân tích ảo, không vào lệnh, lưu đầy đủ bằng chứng vào database |
+| **Go-Live Dashboard** | [scripts/run_dashboard.bat](file:///d:/Applications/TM-EA/scripts/run_dashboard.bat) | `scripts/run_dashboard.ps1` | Tự động đồng bộ lịch sử lệnh từ MT5 và đánh giá 5 Cổng Go-Live |
+| **Emergency Kill-Switch** | [scripts/emergency_stop.bat](file:///d:/Applications/TM-EA/scripts/emergency_stop.bat) | `scripts/emergency_stop.ps1` | Nút dừng khẩn cấp: ngắt AI ngay lập tức và đóng toàn bộ vị thế đang mở bảo vệ vốn |
+| **Resume Trading** | [scripts/resume_trading.bat](file:///d:/Applications/TM-EA/scripts/resume_trading.bat) | `scripts/resume_trading.ps1` | Xóa cờ ngắt khẩn cấp `config/ai/KILL`, đưa hệ thống về trạng thái sẵn sàng |
+
 Mở terminal PowerShell tại thư mục dự án `D:\Applications\TM-EA\`:
 
 ### 5.1. Chế độ Paper Trading (Khuyên dùng khi mới làm quen)

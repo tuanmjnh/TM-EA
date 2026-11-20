@@ -20,7 +20,16 @@ Thay doi:
       * Tự động phát xung nhịp `config/ai/heartbeat.json` ghi nhận uptime, PID, trạng thái terminal và tham số thị trường.
     + 4. Tích hợp trực tiếp vào Trade Runner (`ai_trade/runner.py`):
       * Tự động đồng bộ số dư thực tế từ MT5 vào PortfolioManager, phát xung nhịp watchdog mỗi chu kỳ lặp và kiểm tra hạn mức danh mục trước khi gửi lệnh.
-    + 5. Bộ kiểm thử tự động toàn diện:
+    + 5. Tính năng Tự động Đồng bộ Khớp lệnh MT5:
+      * Bổ sung cơ chế đồng bộ lịch sử deals từ MT5 Terminal (`dashboard.py --sync`) trực tiếp vào bảng `trade_outcomes` trong SQLite `data/results.db`, cho phép kiểm toán tức thì 94 lệnh thực tế đã đóng.
+    + 6. Bộ Kịch bản Vận hành 1-Click (Operational Launcher Suite):
+      * Xây dựng trọn bộ kịch bản chạy nhanh trong thư mục `scripts/` (hỗ trợ cả Batch script và PowerShell script):
+        - `run_live.bat` / `.ps1`: Khởi động Live Forward Demo (0.01 lot, 30s/lần).
+        - `run_paper.bat` / `.ps1`: Khởi động Paper Forward Demo (mô phỏng ảo, an toàn).
+        - `run_dashboard.bat` / `.ps1`: Xem Bảng điều khiển Go-Live và tự đồng bộ deals.
+        - `emergency_stop.bat` / `.ps1`: Nút dừng khẩn cấp (Panic button) kích hoạt Kill-Switch và đóng sạch lệnh.
+        - `resume_trading.bat` / `.ps1`: Xóa cờ ngắt khẩn cấp và đưa hệ thống trở lại trạng thái sẵn sàng.
+    + 7. Bộ kiểm thử tự động toàn diện:
       * Bổ sung `tests/test_reporting_and_portfolio.py`, nâng tổng số test suite tự động lên 14/14 tests passed 100%.
 
 [2026-11-20] - v5.1 (PHASE 3 SELF-EVOLUTION ENGINE & WALK-FORWARD OOS COMPLETE)

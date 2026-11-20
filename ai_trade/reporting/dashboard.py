@@ -41,6 +41,53 @@ class PerformanceAuditor:
     def __init__(self, db_path: str = DEFAULT_DB_PATH):
         self.db_path = db_path
 
+    def sync_mt5_deals(self, days: int = 30) -> int:
+        """
+        Fetch closed deals from MT5 terminal and synchronize into trade_outcomes table in SQLite.
+        Returns count of newly synchronized deals.
+        """
+        try:
+            from ..bridge.mt5_mcp_server import mt5_history_deals
+            deals = mt5_history_deals(days=days)
+            if not isinstance(deals, list) or (deals and "error" in deals[0]):
+                return 0
+
+            closed_deals = [d for d in deals if d.get("entry") == "OUT"]
+            if not closed_deals or not os.path.exists(self.db_path):
+                return 0
+
+            conn = sqlite3.connect(self.db_path)
+            c = conn.cursor()
+
+            c.execute("SELECT ticket FROM trade_outcomes")
+            existing_tickets = {row[0] for row in c.fetchall()}
+
+            new_count = 0
+            for d in closed_deals:
+                ticket = d.get("ticket", 0)
+                if ticket in existing_tickets:
+                    continue
+
+                pnl = round(d.get("profit", 0.0) + d.get("swap", 0.0), 2)
+                outcome = "WIN" if pnl > 0.01 else ("LOSS" if pnl < -0.01 else "BREAKEVEN")
+                close_time = d.get("time", "")
+                close_price = d.get("price", 0.0)
+                comm = round(abs(d.get("commission", 0.0)), 2)
+
+                c.execute("""
+                INSERT INTO trade_outcomes (
+                    decision_id, ticket, close_time, close_price,
+                    pnl_usd, r_multiple, outcome, spread_paid, commission_paid
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (0, ticket, close_time, close_price, pnl, 1.0, outcome, 0.0, comm))
+                new_count += 1
+
+            conn.commit()
+            conn.close()
+            return new_count
+        except Exception:
+            return 0
+
     def audit(self, closed_trades_override: Optional[List[Dict[str, Any]]] = None) -> GoLiveReport:
         """
         Audit database records and compute Phase 4 Go-Live readiness.
@@ -75,7 +122,7 @@ class PerformanceAuditor:
             try:
                 conn = sqlite3.connect(self.db_path)
                 c = conn.cursor()
-                c.execute("SELECT outcome, profit_usd FROM trade_outcomes")
+                c.execute("SELECT outcome, pnl_usd FROM trade_outcomes")
                 db_trades = c.fetchall()
                 for outcome, pnl in db_trades:
                     trades.append({"outcome": outcome, "profit": pnl})
@@ -188,7 +235,17 @@ class PerformanceAuditor:
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="TM-EA AI Trade Performance & Go-Live Dashboard")
+    parser.add_argument("--sync", action="store_true", help="Sync closed deals from MT5 terminal into results.db")
+    parser.add_argument("--days", type=int, default=30, help="Days of deal history to query from MT5 (default 30)")
+    args = parser.parse_args()
+
     auditor = PerformanceAuditor()
+    if args.sync:
+        synced = auditor.sync_mt5_deals(days=args.days)
+        print(f"🔄 Đã đồng bộ {synced} lệnh đóng mới từ MT5 Terminal vào data/results.db\n")
+
     report = auditor.audit()
     auditor.print_terminal_dashboard(report)
 
