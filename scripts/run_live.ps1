@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - PowerShell Operational Suite Launcher
+# TM-EA AI Trade - PowerShell Operational Suite Launcher
 param (
     [string]$Mode = "live",
     [string]$Symbol = "XAUUSDm",

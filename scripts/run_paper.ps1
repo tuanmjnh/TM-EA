@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Paper Trading Launcher
+# TM-EA AI Trade - Paper Trading Launcher
 param (
     [string]$Symbol = "XAUUSDm",
     [int]$Interval = 30

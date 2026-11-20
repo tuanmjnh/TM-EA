@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Resume Trading Script
+# TM-EA AI Trade - Resume Trading Script
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location (Join-Path $ScriptDir "..")
 

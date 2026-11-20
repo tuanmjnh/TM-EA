@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Emergency Kill-Switch (Panic Button)
+# TM-EA AI Trade - Emergency Kill-Switch (Panic Button)
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location (Join-Path $ScriptDir "..")
 
