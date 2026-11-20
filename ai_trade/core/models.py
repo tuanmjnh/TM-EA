@@ -24,15 +24,21 @@ class VerdictEnum(str, Enum):
 
 
 class MarketContext(BaseModel):
+    model_config = {"extra": "allow"}
+
     symbol: str = "XAUUSDm"
     timeframe: str = "M5"
+    session: str = "London Kill-Zone"
+    kill_zone: str = "London KZ"
+    timestamp: str = ""
     bid: float = 0.0
     ask: float = 0.0
     spread_points: float = 0.0
     atr: float = 0.0
-    adx_h1: float = 0.0
+    adx: float = 25.0
+    adx_h1: float = 25.0
     regime: str = "RANGE"
-    kill_zone: str = "London KZ"
+    news_risk_level: str = "LOW"
     server_time: str = ""
     gmt_time: str = ""
     asian_high: Optional[float] = None

@@ -108,7 +108,8 @@ class TradeRunner:
 
         if not setup:
             context = self.detector.get_market_context()
-            logger.info(f"Market Pulse [{context.session}] {self.symbol} | Bid: {bid:.3f} Ask: {ask:.3f} | Spread: {spread} pts | Regime: {context.regime} | (No active setup)")
+            session_name = getattr(context, "session", getattr(context, "kill_zone", "Session"))
+            logger.info(f"Market Pulse [{session_name}] {self.symbol} | Bid: {bid:.3f} Ask: {ask:.3f} | Spread: {spread} pts | Regime: {context.regime} | (No active setup)")
             return True
 
         signal, context = setup
