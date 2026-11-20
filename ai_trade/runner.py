@@ -12,6 +12,13 @@ import logging
 import datetime
 from typing import Optional
 
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
+
 from .core.models import EASignal, MarketContext, VerdictEnum
 from .core.safety import is_kill_active, emergency_halt_and_close
 from .core.portfolio import PortfolioManager

@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Emergency Kill-Switch (Panic Button)
+# TM-EA AI Trade - Emergency Kill-Switch (Panic Button)
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 

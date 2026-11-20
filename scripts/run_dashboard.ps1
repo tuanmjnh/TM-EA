@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Go-Live Readiness Dashboard
+# TM-EA AI Trade - Go-Live Readiness Dashboard
 param (
     [switch]$Sync = $true,
     [int]$Days = 30

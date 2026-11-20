@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Paper Runner
+# TM-EA AI Trade - Paper Runner
 param (
     [string]$Symbol = "XAUUSDm",
     [int]$Interval = 30

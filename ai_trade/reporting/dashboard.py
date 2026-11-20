@@ -4,10 +4,18 @@ Audits trade decisions, execution PnL, AI filter efficiency,
 and validates strict Go-Live gating criteria before live scaling.
 """
 import os
+import sys
 import sqlite3
 import datetime
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel, Field
+
+if sys.platform == "win32":
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 DEFAULT_DB_PATH = "data/results.db"
 

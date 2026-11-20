@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - Resume Trading Script
+# TM-EA AI Trade - Resume Trading Script
 $OutputEncoding = [System.Text.Encoding]::UTF8
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 

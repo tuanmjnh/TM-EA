@@ -1,4 +1,4 @@
-﻿# TM-EA AI Trade - PowerShell Live Runner
+# TM-EA AI Trade - PowerShell Live Runner
 param (
     [string]$Symbol = "XAUUSDm",
     [double]$Lot = 0.01,
