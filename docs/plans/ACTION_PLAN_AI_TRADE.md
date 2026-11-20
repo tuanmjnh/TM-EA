@@ -145,4 +145,10 @@
   - [x] Thiết lập Lineage Tree (`config/ai/lineage_tree.json`) và cơ chế Auto-Rollback khi regression > 10% (`ai_trade/evolution/lineage.py`).
   - [x] Xây dựng Self-Evolution Orchestrator (`ai_trade/evolution/optimizer.py`) điều phối chu trình đột biến -> kiểm thử -> sàng lọc -> thăng hạng.
   - [x] Mở rộng bộ kiểm thử tự động `tests/test_evolution.py` (Toàn bộ 11/11 tests passed 100%).
-- [ ] **Phase 4: Nghiệm thu và Cân nhắc Live.**
+- [x] **Phase 4: Bộ công cụ Nghiệm thu, Cân bằng Danh mục & Giám sát Hệ thống:**
+  - [x] Xây dựng Portfolio Capital Allocator (`ai_trade/core/portfolio.py`) quản trị tỷ trọng vốn giữa 2 chiến lược (60% GSS / 40% SB), trần rủi ro đồng thời (Aggregate Risk Cap <= 2.0%) và hệ số rủi ro thăm dò (Live Probing Multiplier 0.25x).
+  - [x] Xây dựng System Watchdog & Heartbeat Monitor (`ai_trade/core/watchdog.py`) liên tục phát xung nhịp `config/ai/heartbeat.json`, giám sát độ trễ và trạng thái terminal.
+  - [x] Xây dựng Performance Auditor & Go-Live Readiness Dashboard (`ai_trade/reporting/dashboard.py`) thẩm định 5 cổng điều kiện ngặt nghèo (50 real trades, PF >= 1.30, Max DD <= 12%, 0 lỗi an toàn, AI filter efficiency).
+  - [x] Tích hợp hoàn chỉnh Watchdog và Portfolio Manager vào Trade Runner (`ai_trade/runner.py`).
+  - [x] Bộ kiểm thử tự động toàn diện `tests/test_reporting_and_portfolio.py` (Toàn bộ 14/14 tests passed 100%).
+  - [ ] Tích lũy đủ 50 lệnh thực tế trên Exness Demo Cent và nghiệm thu toàn bộ 5 cổng Go-Live trước khi mở vốn thật.

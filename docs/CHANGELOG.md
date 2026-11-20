@@ -5,6 +5,24 @@
 ---
 
 ```yaml
+[2026-11-20] - v5.2 (PHASE 4 PERFORMANCE DASHBOARD, PORTFOLIO RISK ALLOCATOR & WATCHDOG)
+Thay doi:
+  - Hoàn thiện toàn bộ các module của Giai đoạn 4 (Phase 4: Readiness Auditor, Portfolio Risk Management & Watchdog) theo ACTION_PLAN_AI_TRADE.md:
+    + 1. Bảng điều khiển Đánh giá Hiệu suất & Cổng Go-Live (`ai_trade/reporting/dashboard.py`):
+      * Tự động thẩm định dữ liệu từ SQLite `data/results.db` và MT5 Deals.
+      * Đo lường 5 cổng Go-Live nghiêm ngặt: Tối thiểu 50 real trades, Profit Factor >= 1.30, Max Drawdown <= 12%, Zero lỗi an toàn, AI Filter Efficiency (> 10% nhiễu được loại bỏ).
+    + 2. Quản trị Phân bổ Vốn & Danh mục Đa chiến lược (`ai_trade/core/portfolio.py`):
+      * Phân bổ tỷ trọng vốn mục tiêu (60% TM_GoldSweepScalper / 40% TM_SessionBreakout).
+      * Rào chắn rủi ro tổng hợp (Aggregate Portfolio Risk Cap <= 2.0% equity mở đồng thời).
+      * Hệ số rủi ro thăm dò (Live Probing Multiplier 0.25x) bảo vệ vốn tối đa khi mới lên live.
+      * Tính toán khối lượng động chính xác theo khoảng cách Stop Loss và quy mô hợp đồng vàng.
+    + 3. Giám sát Hệ thống & Xung nhịp Sống (`ai_trade/core/watchdog.py`):
+      * Tự động phát xung nhịp `config/ai/heartbeat.json` ghi nhận uptime, PID, trạng thái terminal và tham số thị trường.
+    + 4. Tích hợp trực tiếp vào Trade Runner (`ai_trade/runner.py`):
+      * Tự động đồng bộ số dư thực tế từ MT5 vào PortfolioManager, phát xung nhịp watchdog mỗi chu kỳ lặp và kiểm tra hạn mức danh mục trước khi gửi lệnh.
+    + 5. Bộ kiểm thử tự động toàn diện:
+      * Bổ sung `tests/test_reporting_and_portfolio.py`, nâng tổng số test suite tự động lên 14/14 tests passed 100%.
+
 [2026-11-20] - v5.1 (PHASE 3 SELF-EVOLUTION ENGINE & WALK-FORWARD OOS COMPLETE)
 Thay doi:
   - Hoàn thiện toàn bộ các module của Giai đoạn 3 (Phase 3: Self-Evolution Loop) theo ACTION_PLAN_AI_TRADE.md:

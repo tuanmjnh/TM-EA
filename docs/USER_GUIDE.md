@@ -1,7 +1,7 @@
 # CẨM NANG HƯỚNG DẪN SỬ DỤNG TM-EA & AI TRADE TỪ A - Z
 
 **Dự án:** TM-EA (Quantitative Scalping & Multi-Agent AI Trade Orchestrator)  
-**Phiên bản tài liệu:** v5.0 | **Cập nhật:** 2026-11-20  
+**Phiên bản tài liệu:** v5.2 | **Cập nhật:** 2026-11-20  
 **Đối tượng:** Người mới bắt đầu, Trader định lượng và Nhà phát triển hệ thống  
 **Tài liệu điều hành tối cao:** [docs/MASTER.md](file:///d:/Applications/TM-EA/docs/MASTER.md)  
 **Đặc tả hệ thống:** [SPEC_GOLD_SCALPER.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_GOLD_SCALPER.md) | [SPEC_AI_TRADE_MODULE.md](file:///d:/Applications/TM-EA/docs/specs/SPEC_AI_TRADE_MODULE.md)  
@@ -28,6 +28,8 @@
 7. [Tra cứu Dữ liệu & Đánh giá Hiệu suất (SQLite results.db)](#7-tra-cứu-dữ-liệu--đánh-giá-hiệu-suất-sqlite-resultsdb)
 8. [Xử lý Sự cố Thường gặp (Troubleshooting)](#8-xử-lý-sự-cố-thường-gặp-troubleshooting)
 9. [Checklist Hàng ngày cho Trader (Daily Routine)](#9-checklist-hàng-ngày-cho-trader-daily-routine)
+10. [Vòng lặp Tự tiến hóa & Tối ưu hóa Tham số (Phase 3 Self-Evolution Engine)](#10-vòng-lặp-tự-tiến-hóa--tối-ưu-hóa-tham-số-phase-3-self-evolution-engine)
+11. [Bảng điều khiển Hiệu suất, Giám sát Watchdog & Quản trị Danh mục (Phase 4)](#11-bảng-điều-khiển-hiệu-suất-giám-sát-watchdog--quản-trị-danh-mục-phase-4)
 
 ---
 
@@ -363,3 +365,65 @@ Toàn bộ quá trình ra quyết định của AI và kết quả giao dịch �
 - [ ] **Bật Runner**: Bật chế độ chạy nền `python -m ai_trade.runner --interval 30 --mode live --lot 0.01` trong suốt phiên London (07:00 – 10:00 GMT).
 - [ ] **Cuối ngày**: Tra cứu `data/results.db` để kiểm tra các quyết định của AI và đối soát PnL với lịch sử lệnh trên MT5.
 - [ ] **Khi có sự cố**: Dùng lệnh `python -m ai_trade.runner --kill` để ngắt khẩn cấp.
+
+---
+
+## 10. VÒNG LẶP TỰ TIẾN HÓA & TỐI ƯU HÓA THAM SỐ (PHASE 3 SELF-EVOLUTION ENGINE)
+
+Hệ sinh thái TM-EA trang bị module tự tiến hóa `ai_trade/evolution/` giúp hệ thống liên tục tinh chỉnh các tham số thích nghi với chế độ thị trường mới mà không can thiệp vào các quy tắc an toàn cốt lõi.
+
+### 10.1. Vùng đột biến an toàn (AI Mutation Zone)
+Trong mã nguồn MQL5 (`MQL5/Experts/TM_GoldSweepScalper.mq5` & `TM_SessionBreakout.mq5`), chỉ các tham số nằm giữa hai thẻ sau mới được phép thay đổi:
+```mql5
+// >>> AI_MUTATION_ZONE_START: Parameters permitted for automated optimization
+input int      InpAsianStartHour  = 0;
+input int      InpAsianEndHour    = 6;
+// ...
+// <<< AI_MUTATION_ZONE_END
+```
+Toàn bộ logic tính Stop Loss, Max Lot, Cooldown và ngắt khẩn cấp nằm trong vùng `[FROZEN SAFETY CODE]` bị đóng băng vĩnh viễn, AI không thể sửa đổi.
+
+### 10.2. Chạy chu kỳ tự tiến hóa bằng CLI
+```powershell
+# Chạy 3 chu kỳ tối ưu hóa mô phỏng (an toàn, không bật MT5 GUI)
+python -m ai_trade.evolution.optimizer --cycles 3 --mock
+
+# Chạy tối ưu hóa thực tế với MT5 Strategy Tester (Headless)
+python -m ai_trade.evolution.optimizer --strategy TM_GoldSweepScalper --cycles 1
+
+# Khôi phục (Rollback) về bộ tham số Champion ổn định gần nhất
+python -m ai_trade.evolution.optimizer --rollback
+```
+
+### 10.3. Tiêu chí sàng lọc Walk-Forward & Monte Carlo
+Một bộ tham số mới chỉ được thăng hạng làm Champion khi:
+1. **Walk-Forward Analysis (4 cửa sổ x 2)**: Tỷ số hiệu suất Out-of-Sample (OOS) so với In-sample (IS) đạt `WFA Efficiency >= 0.50`.
+2. **Monte Carlo 100 Runs**: Mức sụt giảm vốn ở phân vị 95% (`95th Drawdown`) <= 15.0% và rủi ro cháy tài khoản (`Risk of Ruin`) <= 1.0%.
+3. **Cơ chế chống suy giảm (Degradation Shield)**: Nếu Profit Factor giảm > 10% so với Champion cũ, hệ thống tự động từ chối và Rollback.
+
+---
+
+## 11. BẢNG ĐIỀU KHIỂN HIỆU SUẤT, GIÁM SÁT WATCHDOG & QUẢN TRỊ DANH MỤC (PHASE 4)
+
+### 11.1. Bảng điều khiển Đánh giá Go-Live (Performance Dashboard)
+Trước khi nâng quy mô từ Demo Cent sang tài khoản vốn thật, hãy chạy lệnh thẩm định:
+```powershell
+python -m ai_trade.reporting.dashboard
+```
+Hệ thống sẽ đối soát toàn bộ lịch sử trong `data/results.db` và chấm điểm 5 Cổng Go-Live:
+- **Gate 1**: Tối thiểu ≥ 50 giao dịch thực tế trên Demo Cent.
+- **Gate 2**: Profit Factor (PF) ≥ 1.30.
+- **Gate 3**: Maximum Equity Drawdown ≤ 12.0%.
+- **Gate 4**: Zero Fatal Safety Violations (0 lần vi phạm SL/RiskGate).
+- **Gate 5**: AI Filter Efficiency (Hội đồng lọc bỏ thành công > 10% tín hiệu nhiễu).
+
+### 11.2. Quản trị Danh mục & Phân bổ Vốn (Portfolio Manager)
+Module `ai_trade/core/portfolio.py` tự động kiểm soát danh mục:
+- **Tỷ trọng mục tiêu**: 60% cho `TM_GoldSweepScalper` (Scalp phiên London) và 40% cho `TM_SessionBreakout` (Breakout phiên Á).
+- **Trần rủi ro đồng thời (Aggregate Risk Cap)**: Tổng rủi ro của tất cả các vị thế đang mở trên tài khoản không vượt quá **2.0% Equity**.
+- **Hệ số thăm dò Live (Live Probing Multiplier)**: Khi kích hoạt tài khoản thật (`--mode live`), hệ thống tự động nhân hệ số `0.25x` (rủi ro giảm còn 0.25%/lệnh) trong giai đoạn thăm dò ban đầu.
+
+### 11.3. Giám sát Hệ thống (System Watchdog & Heartbeat)
+Khi Trade Runner hoạt động, `SystemWatchdog` sẽ liên tục phát xung nhịp vào file `config/ai/heartbeat.json`:
+- Cung cấp thông tin trạng thái (`RUNNING`, `CONNECTED`, `HALTED`), mã PID tiến trình, thời gian hoạt động liên tục (uptime) và thông số thị trường.
+- Trader hoặc các dịch vụ giám sát bên ngoài (Zabbix, Prometheus, Telegram Bot) có thể đọc file JSON này để kích hoạt cảnh báo nếu heartbeat bị ngắt quá 60 giây.

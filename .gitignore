@@ -25,6 +25,10 @@ data/*.sqlite
 data/*.sqlite3
 !data/.gitkeep
 
+# Runtime ephemeral files & kill flags
+config/ai/KILL
+config/ai/heartbeat.json
+
 # Operating system artifacts
 Thumbs.db
 ehthumbs.db

@@ -2,6 +2,7 @@
 TM-EA AI Trade Live & Paper Orchestrator Runner.
 Continuously scans MT5 market rates, detects quantitative setups,
 adjudicates via Multi-Agent Committee, validates through Hard RiskGate,
+enforces Portfolio Capital Allocation, monitors System Health,
 and executes risk-controlled trades.
 """
 import sys
@@ -13,9 +14,17 @@ from typing import Optional
 
 from .core.models import EASignal, MarketContext, VerdictEnum
 from .core.safety import is_kill_active, emergency_halt_and_close
+from .core.portfolio import PortfolioManager
+from .core.watchdog import SystemWatchdog
 from .committee.orchestrator import AIOrchestrator
 from .signals.detector import SignalDetector
-from .bridge.mt5_mcp_server import mt5_status, mt5_order_send, mt5_symbol_info
+from .bridge.mt5_mcp_server import (
+    mt5_status,
+    mt5_order_send,
+    mt5_symbol_info,
+    mt5_positions,
+    mt5_account_info
+)
 
 # Configure logging
 logging.basicConfig(
@@ -43,6 +52,11 @@ class TradeRunner:
             db_path="data/results.db"
         )
         self.detector = SignalDetector(symbol=self.symbol)
+        self.watchdog = SystemWatchdog()
+        self.portfolio = PortfolioManager(
+            total_equity=5000.0,
+            is_live_probing=(self.mode == "live")
+        )
         self.last_signal_time: Optional[str] = None
 
     def check_connection(self) -> bool:
@@ -50,8 +64,13 @@ class TradeRunner:
         status = mt5_status()
         if not status.get("connected"):
             logger.error(f"MT5 Terminal not connected: {status.get('error')}")
+            self.watchdog.pulse(status_label="DISCONNECTED", extra_meta={"error": status.get("error")})
             return False
-        logger.info(f"MT5 Connected | Login: {status.get('login')} | Server: {status.get('server')} | Balance: ${status.get('balance'):,.2f} USD")
+
+        balance = status.get("balance", 5000.0)
+        self.portfolio.total_equity = balance
+        logger.info(f"MT5 Connected | Login: {status.get('login')} | Server: {status.get('server')} | Balance: ${balance:,.2f} USD")
+        self.watchdog.pulse(status_label="CONNECTED", extra_meta={"login": status.get("login"), "balance": balance})
         return True
 
     def run_cycle(self) -> bool:
@@ -59,7 +78,11 @@ class TradeRunner:
         # 1. Physical Kill-Switch Check
         if is_kill_active():
             logger.critical("🛑 [KILL-SWITCH ACTIVE] Trading cycle aborted. config/ai/KILL detected.")
+            self.watchdog.pulse(status_label="HALTED", extra_meta={"reason": "kill_switch_active"})
             return False
+
+        # Pulse Watchdog
+        self.watchdog.pulse(status_label="RUNNING", extra_meta={"symbol": self.symbol, "mode": self.mode})
 
         # 2. Market Pulse
         sym_info = mt5_symbol_info(self.symbol)
@@ -101,7 +124,7 @@ class TradeRunner:
         logger.info(f"🏛️ COMMITTEE VERDICT: {decision.verdict.value} (Confidence: {decision.confidence * 100:.1f}%)")
         logger.info(f"Risk Multiplier: {decision.execution_params.suggested_risk_mult:.2f}x | Reasoning: {decision.chair_reasoning}")
 
-        # 5. RiskGate & Execution
+        # 5. RiskGate Check
         if not decision.validation.passed:
             logger.warning(f"❌ BLOCKED BY HARD RISKGATE: {decision.validation.reason} ({decision.validation.violations})")
             self.last_signal_time = signal_key
@@ -114,18 +137,42 @@ class TradeRunner:
         ]
 
         if not is_actionable:
-            logger.info(f"⏸️ Committee decided to HOLD/CANCEL. No trade executed.")
+            logger.info("⏸️ Committee decided to HOLD/CANCEL. No trade executed.")
             self.last_signal_time = signal_key
             return True
 
-        # 6. Trade Execution (Paper vs Live)
-        lot_size = round(max(0.01, self.fixed_lot * decision.execution_params.suggested_risk_mult), 2)
+        # 6. Portfolio Capacity & Dynamic Lot Calculation
+        open_pos = mt5_positions(self.symbol) if self.mode == "live" else []
+        if isinstance(open_pos, list) and open_pos and "error" in open_pos[0]:
+            open_pos = []
+
+        proposed_risk = 1.0 * decision.execution_params.suggested_risk_mult
+        can_open, effective_risk, reason = self.portfolio.can_open_trade(
+            strategy_name=signal.source_ea,
+            proposed_risk_pct=proposed_risk,
+            open_positions=open_pos
+        )
+        if not can_open:
+            logger.warning(f"❌ BLOCKED BY PORTFOLIO MANAGER: {reason}")
+            self.last_signal_time = signal_key
+            return True
+
+        # Compute dynamic lot size based on equity, SL distance, and contract size
+        dyn_lot = self.portfolio.calculate_lot_size(
+            entry_price=signal.entry_price,
+            stop_loss=decision.execution_params.stop_loss,
+            risk_pct=effective_risk,
+            min_volume=0.01,
+            max_volume=max(0.01, self.fixed_lot)
+        )
+        lot_size = round(dyn_lot, 2)
         action_str = "BUY" if signal.direction > 0 else "SELL"
         sl = decision.execution_params.stop_loss
         tp = decision.execution_params.take_profit
 
+        # 7. Trade Execution (Paper vs Live)
         if self.mode == "live":
-            logger.info(f"🚀 [LIVE EXECUTION] Sending {action_str} {lot_size} lot on {self.symbol}...")
+            logger.info(f"🚀 [LIVE EXECUTION] Sending {action_str} {lot_size} lot (Effective Risk: {effective_risk:.2f}%) on {self.symbol}...")
             res = mt5_order_send(
                 symbol=self.symbol,
                 action=action_str,
@@ -141,7 +188,7 @@ class TradeRunner:
             else:
                 logger.error(f"❌ ORDER FAILED: Retcode {res.get('retcode')} - {res.get('error_details')}")
         else:
-            logger.info(f"📝 [PAPER MODE] Virtual trade recorded: {action_str} {lot_size} lot @ {decision.execution_params.entry_price} (SL: {sl}, TP: {tp})")
+            logger.info(f"📝 [PAPER MODE] Virtual trade recorded: {action_str} {lot_size} lot @ {decision.execution_params.entry_price} (SL: {sl}, TP: {tp}, Effective Risk: {effective_risk:.2f}%)")
 
         self.last_signal_time = signal_key
         return True
@@ -160,6 +207,7 @@ class TradeRunner:
                 time.sleep(self.interval)
         except KeyboardInterrupt:
             logger.info("Runner stopped by user.")
+            self.watchdog.pulse(status_label="STOPPED", extra_meta={"reason": "user_interrupt"})
 
 
 def main():
